@@ -1,0 +1,120 @@
+PHARMAVAULT - NFC DISPENSING + FILL DEMONSTRATION
+
+Use the new firmware on BOTH boards and dummy contents. Keep existing wiring.
+Power both boards off before changing physical wiring or servo linkages.
+
+1. VERIFY STARTUP
+   MSP serial9600: PHARMAVAULT MSP430 ready (NFC sequence 1; UART fix 1)
+   ESP serial115200, send ?: PHARMAVAULT NFC + fill firmware 1
+   No automatic movement at startup. Dashboard NFC section says Paused.
+   Existing NTC temperature, DHT11 humidity and HC distance should refresh.
+
+2. VERIFY CALIBRATION WHILE NFC IS PAUSED
+   If the saved positions still match the final mechanism, keep them.
+   Otherwise test/save distinct SG90 open and closed pulses, then test/save
+   each reachable SG92R compartment position. Observe physical alignment.
+   Use the existing manual Position carousel and Run flap cycle controls to
+   verify operation before enabling automatic taps. Wait3s between movements.
+   Raw carousel tests clear the selected slot's old position before movement;
+   save the newly verified position again.
+
+3. ASSIGN A CARD WHILE PAUSED
+   Tap card -> dashboard shows UID -> select compartment1 -> Use last scanned
+   tag -> Save assignment. Paused scans do not move either motor.
+   Slot1 must already have a saved carousel position before auto dispensing.
+   Remove the card after assigning it.
+
+4. ENABLE AND TEST ONE TAP
+   Confirm the displayed calibration/clearance checks, Enable tap dispensing.
+   Remove all cards and wait for the Ready message. Enabling causes no motion.
+   Tap the compartment1 card once.
+   Observe in order: flap closes -> carousel moves to1 -> flap opens -> closes.
+   Only one motor receives PWM at a time. Total command duration about2.95s.
+   The MSP LCD may show Closing flap, Positioning, Opening flap and finally
+   Servo cmd sent. The dashboard's slot1 log changes to an open/close command.
+   Inspect actual alignment and dummy contents; PWM cannot verify delivery.
+
+5. HOLD, REMOVE AND RETAP
+   Keep that card at the reader for10 seconds. It must not repeat dispensing.
+   Remove it for at least1 second. Wait at least3 seconds after movement ended
+   and until the dashboard says Ready. Retap; expect exactly one new cycle.
+   A short tap during movement/cooldown must not cause a delayed extra cycle.
+   Remove it and tap afresh when ready. A UART backlog may show Tap expired /
+   Remove and retap instead of an action. Do not keep tapping to retry blindly.
+
+6. UNASSIGNED AND UNCALIBRATED CARDS
+   If a spare unassigned card is available, tap it: TAG_UNKNOWN, no motion.
+   A card assigned to a slot without a saved position returns SLOT_UNSET,
+   no motion. Register or edit cards only while mode is paused.
+   Do not disturb a working mapping merely to run this optional test.
+
+7. PAUSE AND CHECK LOG LOOKUP
+   Click Pause tap dispensing while idle. Remove and retap the assigned card.
+   It now identifies the slot and retrieves its log without movement.
+   A successful previous cycle shows Servo cmd sent. A slot with no recorded
+   cycle since ESP restart shows NO_LOG. These are RAM-only latest commands.
+
+8. DEMONSTRATE FILL HEIGHT
+   Keep mode paused and the sensor fixed. For a table simulation, use a flat
+   target150mm from the transducers as the empty reference; wait about3s,
+   tick confirmation and Capture 0% empty. Put a target50mm away to represent
+   the intended full level; wait, confirm again and Capture 100% full.
+   Then test these distances, allowing five readings to settle each time:
+      150mm -> about0%
+      125mm -> about25%
+      100mm -> about50%
+       75mm -> about75%
+       50mm -> about100%
+   Differences due to sensor noise and target placement are expected.
+   This table simulation must be replaced by actual empty/full captures after
+   mounting the sensor above the compartment. A single pill may not provide
+   a reliable reflecting surface; the percentage is height, not pill count.
+
+9. CHECK INVALID MEASUREMENTS
+   A missing echo should show Unavailable, never a fabricated0%.
+   A wall behind a removed target may still return a valid distance, so
+   removing a target does not guarantee NoPulse. Moving it well beyond the
+   calibrated empty distance should show outside calibrated range/unavailable.
+   Moving an uneven target may show Waiting for five steady readings.
+   ESP serial command u shows echo diagnostics and the fill percentage;
+   percent=-1 means unavailable. It sends no motor commands.
+
+10. COMBINE NFC AND FILL
+    Restore the fixed mounted sensor and calibrated dummy contents. Enable
+    NFC, clear the reader, tap the assigned card and observe the sequence.
+    After motor commands finish, allow about3s for new stable distance
+    readings. If dummy contents actually left the viewed compartment, the
+    estimated percentage should decrease. Software completion alone does
+    not guarantee that the contents moved or that HC-SR04 can see them.
+    Dashboard updates may pause during movement; its prior percentage is
+    hidden after its freshness limit. UART remains active during motion.
+
+11. RESTART AND PERSISTENCE
+    With motors idle, restart both boards. Servo positions, NFC assignments,
+    Wi-Fi/login and fill references persist. Tap mode returns to Paused,
+    logs reset, and fresh sensor samples are required before displaying%.
+    Re-enable, remove cards, wait Ready, then tap. A card already held during
+    boot or enable must not trigger automatically.
+
+12. OPTIONAL LINK-LOSS CHECK
+    With no movement, pause the MSP430 in CCS for over16s. ESP should report
+    reader link unavailable and pause automatic taps; environment data also
+    becomes stale. Resume MSP, wait for heartbeat/data, then re-enable NFC.
+    Restarting or reconnecting the reader also pauses automatic mode.
+    Do not unplug components while powered to perform a fault test.
+
+COMMON MESSAGES
+  REMOVE_CARD: remove it for>=1s; wait ready, then retap.
+  NFC_BUSY / NFC_COOLDOWN: no new cycle queued; wait and retap later.
+  SLOT_UNSET: assigned compartment needs a calibrated SG92R position.
+  NFC_NOT_READY: check updated MSP firmware, heartbeat and flap calibration.
+  TAG_UNKNOWN: UID is not assigned.
+  No reply: UART response missing; check both running boards and crossed UART.
+  PWM fault: pause further tests; inspect hardware and restart after correction.
+  Fill unavailable: check valid stable echo and both new empty/full references.
+
+SHORT DEMO
+Show sensors -> show0/50/100% with flat targets -> pause and assign a card ->
+enable and waitReady -> tap and show complete two-motor sequence -> hold card
+without repeat -> show settled fill -> pause and retrieve log -> explain that
+the prototype records commands and estimated fill height, not medication intake.

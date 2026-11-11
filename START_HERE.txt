@@ -1,0 +1,128 @@
+PHARMAVAULT - NFC DISPENSING AND FILL-HEIGHT PERCENTAGE
+
+WHAT CHANGED
+When tap dispensing is enabled, a recognized card assigned to a calibrated
+compartment commands this sequence:
+  SG90 closes -> SG92R positions that compartment -> SG90 opens -> SG90 closes.
+The motors receive PWM one at a time. The existing manual controls remain.
+Ultrasonic distance now produces an estimated fill-height percentage after
+you capture an empty reference (0%) and the intended full reference (100%).
+No additional components, wires, physical buttons or switches are required.
+
+UPDATE BOTH BOARDS
+ESP32:
+  Open ESP32/PharmaVault_ESP32S3/PharmaVault_ESP32S3.ino in your working
+  Arduino IDE. Use ESP32S3 Dev Module, Arduino-ESP32 core3.x, your existing
+  working port/USB settings. Upload without erasing all flash.
+  No additional Arduino libraries or source edits are required.
+  Serial Monitor115200, send ?; expected:
+    PHARMAVAULT NFC + fill firmware 1
+
+MSP430:
+  The simplest route is to load the included, precompiled
+    CCS/PharmaVault_MSP430/Firmware/PharmaVault_MSP430.out
+  through your existing CCS debug target, then Resume/Run.
+  To rebuild instead, replace main.c, rc522.c AND rc522.h in your current
+  project with the included versions. Build, Debug/load, then Resume/Run.
+  Do not add second copies of these source files.
+  MSP debug console9600, expected startup marker:
+    PHARMAVAULT MSP430 ready (NFC sequence 1; UART fix 1)
+  Project import details are in CCS/PharmaVault_MSP430/README.txt.
+
+The old MSP firmware cannot provide the removal/heartbeat events required
+for the new automatic mode. Temperature/humidity/UART pins stay unchanged.
+
+DASHBOARD
+Join your existing PharmaVault Wi-Fi and open http://192.168.4.1/.
+Username demo; use the existing password printed by ? on ESP serial.
+Refresh with Ctrl+F5. Existing Wi-Fi credentials, NFC assignments, flap
+positions and carousel positions remain saved. Tap dispensing starts PAUSED
+after every ESP restart or MSP reader restart/reconnect.
+
+NFC SETUP - KEEP TAP DISPENSING PAUSED
+1. In Flap positions - SG90, test and save the actual open/closed positions
+   with the final linkage. Previously saved verified positions are retained.
+2. In Carousel positions - SG92R, test/save each reachable compartment's
+   alignment. Use real measured positions, not invented evenly spaced angles.
+   Previously saved positions are retained.
+3. Tap a card while mode is paused. In Assign NFC tags to compartments,
+   select its slot, Use last scanned tag, then Save assignment.
+4. In the NFC section, confirm the mechanism/calibration checks and click
+   Enable tap dispensing. This enables the mode; it does not move a motor.
+5. Remove all cards. Wait for the reader-clear/Ready message (up to about5s
+   if the reader was already empty). Then tap the assigned card.
+
+WHAT A TAP DOES
+The selected compartment must have a saved carousel position and the flap
+must have saved distinct open/closed positions. An accepted tap commands:
+  GPIO3 SG90 closed650ms
+  detach GPIO3 -> GPIO5 SG92R saved compartment position1000ms
+  detach GPIO5 -> GPIO3 SG90 open650ms, then closed650ms
+  detach GPIO3. Total commanded motion is about2.95 seconds.
+The final log records that PWM was sent, not proof that medicine emerged.
+
+Holding a card in the reader does not intentionally repeat the cycle. Remove
+it for at least one second, wait at least three seconds after the previous
+motion finishes, then retap for another cycle. Busy/cooldown requests are
+rejected, not saved as a future cycle. A new tap waiting over about500ms
+before its first UART transmission expires and must be repeated.
+UART retries reuse their sequence and cannot start duplicate cycles.
+Unassigned cards and slots without calibrated positions do not actuate.
+
+Pause tap dispensing before registering cards, changing dummy contents or
+calibrating. Accepted manual movement/calibration/tag edits also pause it.
+After restart/reconnect/PWM fault, inspect the mechanism before re-enabling.
+Pause mode prevents later taps; it is not an emergency stop and does not
+interrupt a motor sequence already executing. HTTP/dashboard refreshes may
+pause during the sequence, while the MCU UART continues to be serviced.
+
+FILL-HEIGHT PERCENTAGE
+Mount the HC-SR04 above the viewed compartment, aimed at its bottom and the
+top surface of the contents. Keep it fixed while capturing these references:
+1. Pause tap dispensing.
+2. Empty the viewed compartment. Wait for Ready to capture, confirm, then
+   click Capture 0% empty. This saves distance E.
+3. Fill to the intended maximum level with representative dummy contents.
+   Wait for steady readings, confirm, then Capture 100% full. This saves F.
+4. The display estimates:
+     fill percent = 100 * (E - measured distance) / (E - F)
+   Example E150mm, F50mm: 150mm=0%, 125mm=25%, 100mm=50%, 50mm=100%.
+
+The full surface must remain at least20mm from the sensor. E-F must be at
+least20mm; empty distance must therefore be at least40mm. Use more clearance
+if the actual mounted setup needs it to produce repeatable echoes.
+The estimate uses the median of five consecutive valid distance readings,
+spread<=10mm and latest age<=2s. Missing/stale/unstable echoes or motor motion
+make it unavailable. Small deviations up to10mm beyond a reference clamp
+to0%/100%; distances farther outside that band are unavailable.
+
+This estimates the height of the reflecting contents surface, not pill
+count, remaining doses or exact volume. Uneven piles, gaps and narrow walls
+can give misleading returns. Test repeatability in the actual dispenser.
+It measures the current view only. It does not store an inventory reading
+for all eight compartments. A common calibration is suitable only when the
+viewed compartments have matching geometry and full/empty reference heights.
+The software cannot verify which compartment is physically under the sensor.
+
+The previous arbitrary 'loaded' reference is deliberately NOT converted to
+100% full. Capture both new references once. They then persist across restart.
+Recalibrate after moving the sensor or changing the compartment geometry.
+
+UNCHANGED WIRING
+  SG90 flap signal GPIO3; SG92R carousel signal GPIO5.
+  MSP P3.3 TX -> ESP GPIO4 RX; ESP GPIO17 TX -> MSP P3.4 RX; link9600 8N1.
+  HC-SR04 TRIG GPIO13; VCC confirmed5V; GND common with both MCUs.
+  HC ECHO -> existing2.2k -> GPIO14 junction -> existing3.2k -> commonGND.
+  Keep all grounds common. Keep the independently working servo5V supply
+  arrangements; do not join different USB sources' positive5V rails together.
+  NTC, DHT11 and RC522 retain their existing3.3V connections.
+
+Two connected servos still share the limits of their USB source and wiring.
+Sequential PWM reduces simultaneous commanded motion but does not prove
+adequate power under load. A command-completed message is not motor feedback.
+No schedules, per-dose lockout, phone/cloud alerts or verified intake are
+implemented. Each accepted fresh tap requests another cycle; demonstrate
+with dummy contents and only mechanically reachable carousel positions.
+
+See DEMO_TEST.txt for end-to-end tests, VALIDATION.txt for build evidence.
+HC-SR04 datasheet: https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf
