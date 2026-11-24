@@ -203,7 +203,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .nav{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10;display:flex;gap:6px;padding:6px;border-radius:999px;background:var(--cta);box-shadow:0 14px 40px rgb(20 40 26/.28)}
 .nav button{background:transparent;color:var(--cta-ink);opacity:.7;min-width:128px;padding:12px 22px}
 .nav button[aria-selected=true]{background:var(--cta-ink);color:var(--cta);opacity:1}
-.nav-note{margin-left:8px;font-size:.66rem;border-radius:999px;background:var(--butter);color:var(--ink);padding:2px 8px;vertical-align:1px}
+.top-status{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px}.nav-note{white-space:nowrap;font-size:.78rem;font-weight:700;border-radius:999px;background:var(--warn-bg);color:var(--warn-ink);padding:8px 14px;box-shadow:var(--shadow)}
 .workspace{padding-top:14px;padding-bottom:120px}
 .global-notice:empty,.message:empty{display:none}
 .global-notice{background:var(--accent-soft);color:var(--ink)}.global-notice,.alert{padding:13px 18px;border-radius:16px;margin-bottom:12px;font-size:.88rem}
@@ -268,11 +268,11 @@ input[type=text],input[type=password],input[type=time]{display:block;width:100%;
 .group-title{margin:34px 0 4px;font-size:1.4rem;font-weight:800;letter-spacing:-.03em}.group-note{margin-bottom:16px}
 #alignmentSection{align-self:start}
 @media(max-width:760px){.shell{padding-left:16px;padding-right:16px}.grid{grid-template-columns:1fr}.cards{grid-template-columns:1fr;gap:12px}.stat strong{font-size:1.9rem}.env-pair strong{font-size:1.5rem}.panel{padding:22px;border-radius:24px}.intro{flex-direction:column;align-items:flex-start;gap:10px;margin-top:10px}.nav button{min-width:118px}.footer{flex-direction:column;gap:3px}.brand small{display:none}.hero{min-height:0}.mascot{position:static!important;height:170px;align-self:center;margin:-4px 0 2px}.hero-copy{max-width:none}.week-dots{gap:6px}}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+@media(max-width:440px){.toprow:has(.nav-note:not([hidden])) .brand>div{display:none}.nav-note,.connection{padding:8px 12px}}@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style></head><body>
-<header class="topbar"><div class="shell"><div class="toprow"><div class="brand"><span class="brand-mark" aria-hidden="true">PV</span><div>PharmaVault<small>A little care. Every day.</small></div></div><span id="connectionState" class="connection" role="status">Connecting</span></div>
+<header class="topbar"><div class="shell"><div class="toprow"><div class="brand"><span class="brand-mark" aria-hidden="true">PV</span><div>PharmaVault<small>A little care. Every day.</small></div></div><div class="top-status"><span id="refillDot" class="nav-note" hidden>Refill due</span><span id="testDot" class="nav-note" hidden>Test on</span><span id="connectionState" class="connection" role="status">Connecting</span></div></div>
 </div></header>
-<nav class="nav" role="tablist" aria-label="Dashboard views"><button id="navToday" role="tab" aria-controls="viewToday" aria-selected="true" tabindex="0">Dashboard<span id="refillDot" class="nav-note" hidden>Refill due</span></button><button id="navSettings" role="tab" aria-controls="viewSettings" aria-selected="false" tabindex="-1">Settings<span id="testDot" class="nav-note" hidden>Test on</span></button></nav>
+<nav class="nav" role="tablist" aria-label="Dashboard views"><button id="navToday" role="tab" aria-controls="viewToday" aria-selected="true" tabindex="0">Dashboard</button><button id="navSettings" role="tab" aria-controls="viewSettings" aria-selected="false" tabindex="-1">Settings</button></nav>
 <main class="shell workspace">
 <div id="connectionNotice" class="global-notice error" role="alert" hidden></div><p id="bridgeStatus" class="global-notice" role="status">Checking healthcare-station link...</p><p id="motionNotice" class="global-notice" role="status" hidden></p><p id="storage" class="global-notice error" role="alert"></p>
 <div id="globalTest" class="test-notice" hidden><p id="irTestBanner" role="alert" hidden></p><button id="quickStopTest" type="button" disabled>Stop test</button></div>
