@@ -17,6 +17,7 @@
 
 #include "PvProtocol.h"
 #include "rc522.h"
+#include "hx711.h"
 
 #define LCD_RS BIT4                    /* H3 control lines on P6. */
 #define LCD_RW BIT5
@@ -35,6 +36,10 @@
 #define REFILL_PAGE_TICKS 250UL      /* About2.5 seconds per16-character page. */
 #define ADC_TEMP_INVALID (-32768L)
 #define DHT_HUMIDITY_INVALID 65535U
+/* Load-cell calibration: HX711 counts per gram. Place a known weight, read raw on the
+ * debug console, then set this to (raw_loaded - raw_tare) / grams. Depends on the cell. */
+#define SCALE_COUNTS_PER_GRAM 420L
+#define SCALE_TARE_SAMPLES 8
 
 #define DEBUG_UART 1                   /* eZ-FET backchannel at 9600 baud. */
 
@@ -78,7 +83,11 @@ static bool box_overdue, box_refill;
 static char refill_text[7][49];
 static bool refill_fetch_active, refill_request_pending;
 static uint8_t refill_next_day, refill_page_day, refill_page_chunk;
-static bool idle_status_page;
+static uint8_t idle_page;      /* 0 pillbox status, 1 environment, 2 scale. */
+static int32_t scale_tare, scale_filtered, scale_grams_x10;
+static int32_t scale_tare_sum;
+static uint8_t scale_tare_count;
+static uint32_t next_scale_log;
 /* Last complete WEEK + Day 1..7 answer. Shown whenever a live tap lookup fails. RAM only. */
 static char cached_week[17], cached_text[7][49];
 static bool cache_valid;
@@ -711,6 +720,32 @@ static void service_remote(uint32_t now)
 }
 
 
+/* Load cell: tare on the first samples after boot, then a light low-pass filter
+ * and conversion to tenths of a gram. Logs to the debug console once a second. */
+static void service_scale(uint32_t now)
+{
+    int32_t raw;
+    char line[64];
+    if (!hx711_poll(&raw)) return;
+    if (scale_tare_count < SCALE_TARE_SAMPLES) {            /* Empty platform at power-up = zero. */
+        scale_tare_sum += raw;
+        if (++scale_tare_count == SCALE_TARE_SAMPLES) {
+            scale_tare = scale_tare_sum / SCALE_TARE_SAMPLES;
+            scale_filtered = scale_tare;
+            snprintf(line, sizeof line, "SCALE tare raw=%ld\r\n", (long)scale_tare);
+            debug_write(line);
+        }
+        return;
+    }
+    scale_filtered += (raw - scale_filtered) / 4;           /* ~0.4 s smoothing at 10 Hz. */
+    scale_grams_x10 = (scale_filtered - scale_tare) * 10L / SCALE_COUNTS_PER_GRAM;
+    if (due(now, next_scale_log)) {
+        next_scale_log = now + 100UL;                        /* Once per second. */
+        snprintf(line, sizeof line, "SCALE raw=%ld,grams_x10=%ld\r\n", (long)raw, (long)scale_grams_x10);
+        debug_write(line);
+    }
+}
+
 /* Restore the idle environment view after transient prompts expire. */
 static void service_lcd(uint32_t now)
 {
@@ -740,8 +775,16 @@ static void service_lcd(uint32_t now)
         return;
     }
     refill_view_active = false;
-    idle_status_page = !idle_status_page;
-    if (idle_status_page) {
+    idle_page = (uint8_t)((idle_page + 1U) % 3U);
+    if (idle_page == 2U && !(hx711_present() && scale_tare_count >= SCALE_TARE_SAMPLES)) idle_page = 0;
+    if (idle_page == 2U) {
+        const int32_t g = scale_grams_x10 > -5 && scale_grams_x10 < 5 ? 0 : scale_grams_x10;
+        const long mag = g < 0 ? -(long)g : (long)g;
+        snprintf(second, sizeof second, "%s%ld.%ld g", g < 0 ? "-" : "", mag / 10L, mag % 10L);
+        display("Pack scale", second, 200);
+        return;
+    }
+    if (idle_page == 0U) {
         if (!box_fresh(now)) display("PB status stale", "Check wireless", 200);
         else if (!strcmp(box_state, "TEST_OVERDUE")) display("TEST overdue", "Check dashboard", 200);
         else if (!strcmp(box_state, "TEST")) display("Test mode active", "No daily count", 200);
@@ -819,6 +862,7 @@ int main(void)
     lcd_init();
     uart_init();
     scheduler_init();
+    hx711_init();                 /* Timer0_A 100 ms load-cell sampling tick. */
     __enable_interrupt();
     reader_online = rc522_init();
     next_nfc = tick_now() + (reader_online ? NFC_PERIOD : 500UL);
@@ -835,6 +879,7 @@ int main(void)
         service_reader(now);
         service_refill(now);
         service_transmit(tick_now());
+        service_scale(now);
         service_lcd(now);
         __disable_interrupt();
         if (rx_head == rx_tail && ticks == now) {

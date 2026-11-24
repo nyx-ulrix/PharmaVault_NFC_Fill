@@ -79,6 +79,7 @@ Power everything off first. Full details are in `WIRING.txt`.
 | MSP GND (H2.20 / H2.22) | FireBeetle GND |
 | RC522 | 3V3, GND, MOSI P3.0, MISO P3.1, SCK P3.2, SDA/SS P2.3, RST P1.6 |
 | LCD | Booster header H3 |
+| XFW-HX711 load cell | VCC 3V3, GND, DT P1.5 (H2.38), SCK P7.0 (H2.28), J2 open. Cell: red E+, black E-, white A-, green A+ |
 
 Do not use the FireBeetle's printed TX/RX pins (GPIO1/3), because those are its USB serial.
 
@@ -99,6 +100,13 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 **MSP430 without CCS:** `Firmware/PharmaVault_Healthcare_MSP430_gcc.hex` is built from the current source with TI's MSP430-GCC 9.3.1. Flash it with TI's MSP Flasher: `MSP430Flasher.exe -n MSP430F5529 -w PharmaVault_Healthcare_MSP430_gcc.hex -v -e ERASE_MAIN -z [RESET,VCC]`. The older `.out`/`.hex` are the original CCS build.
 
 **MSP430:** in CCS, use File > Import Projects and pick `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430` (import it once). Build it, then Run > Debug and press **Resume**. You can also load the prebuilt `.out` from `Firmware/` instead of building. Its console runs at 9600 baud and should show `PHARMAVAULT healthcare MSP430 ready (wireless provider 1)`.
+
+### Calibrating the load cell
+
+1. Power the MSP430 with the platform empty. The console (9600 baud) prints `SCALE tare raw=...`.
+2. Put a known weight on it (for example a 100 g item) and note `raw=` in the `SCALE raw=...,grams_x10=...` lines.
+3. Set `SCALE_COUNTS_PER_GRAM` in `main.c` to `(raw_loaded - tare_raw) / grams`, rebuild and flash.
+4. The LCD then shows the weight on its **Pack scale** page.
 
 ## 4. Pair the bridge (once)
 
