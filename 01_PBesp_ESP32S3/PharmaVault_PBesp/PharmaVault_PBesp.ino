@@ -164,34 +164,130 @@ static inline int pv_uid_valid(const char *uid)
 // Local authenticated bridge transport; all other operating logic is retained.
 #include "PvWirelessSerial.h"
 #include "PvPillboxSensors.h"
+#include "PvMascot.h"
 
 static const char DashboardHtml[] PROGMEM = R"PVHTML(
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
 <title>PharmaVault · Daily care</title>
 <style>
-:root{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#203e37;background:#f3f5f1;--muted:#62746c;--line:#dfe7df;--green:#14634f}*{box-sizing:border-box}body{margin:0}[hidden]{display:none!important}button,input,select{font:inherit}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #db9d32;outline-offset:4px}button{border:0;border-radius:10px;background:var(--green);color:white;padding:11px 18px;font-size:.87rem;font-weight:650;cursor:pointer;min-height:44px}button:hover:not(:disabled){background:#0d4f3e}button:disabled{background:#e4e9e3;color:#748078;cursor:not-allowed}.secondary{background:#eaf0e9;color:#234f3e}.secondary:hover:not(:disabled){background:#dbe8d9}.ghost{background:transparent;color:var(--green);border:1px solid var(--line)}.ghost:hover:not(:disabled){background:#eaf0e9}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(1.8rem,4vw,2.5rem);font-weight:600;letter-spacing:-.045em;line-height:1.15;margin-bottom:10px}h2{font-size:1.15rem;font-weight:650;letter-spacing:-.02em;margin-bottom:14px}p{margin-bottom:14px}small,.quiet,.note{color:var(--muted);font-size:.8rem}small{display:block;line-height:1.6}.eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:.69rem;font-weight:700;color:var(--muted);margin-bottom:12px}.shell{max-width:1120px;padding:0 28px;margin:auto}.topbar{background:#fff;border-bottom:1px solid var(--line)}.toprow{display:flex;align-items:center;justify-content:space-between;min-height:86px;gap:16px}.brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:1.1rem;letter-spacing:-.035em}.brand-mark{display:grid;place-items:center;width:39px;height:39px;border-radius:12px;background:var(--green);color:white;font-size:.8rem;letter-spacing:.02em}.brand small{font-size:.62rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase}.connection{display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--muted)}.connection:before{content:"";width:7px;height:7px;border-radius:50%;background:#aaada5}.connection[data-online=true]:before{background:#398d5b}.nav{display:flex;gap:24px}.nav button{background:transparent;color:var(--muted);border-radius:0;border-bottom:3px solid transparent;padding:14px 5px;min-width:68px;font-size:.86rem}.nav button[aria-selected=true]{color:var(--green);border-bottom-color:var(--green)}.nav button:hover{background:#f6f8f4}.nav-note{margin-left:5px;font-size:.68rem;border-radius:12px;background:#fae7bb;color:#805210;padding:2px 6px}.workspace{padding-top:28px;padding-bottom:48px}.global-notice:empty,.message:empty{display:none}.global-notice,.alert{border:1px solid #e9c9b2;background:#fff6eb;color:#80491e;padding:13px 16px;border-radius:12px;margin-bottom:12px;font-size:.85rem}.error{background:#fff1ee;border-color:#edc5bd;color:#9b352b}.test-notice{display:flex;gap:20px;align-items:center;justify-content:space-between;background:#273f39;color:#fff;border-radius:14px;padding:15px 18px;margin-bottom:18px}.test-notice p{margin:0;font-size:.83rem}.test-notice button{flex-shrink:0;background:#fff;color:#203e37}.intro{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin:8px 0 25px}.intro p{margin-bottom:0;font-size:.9rem;color:var(--muted)}.intro .eyebrow{font-size:.69rem;margin-bottom:10px}.badge{display:inline-flex;align-items:center;gap:6px;border-radius:30px;padding:6px 11px;background:#e9f1e9;font-size:.72rem;font-weight:650;white-space:nowrap;color:var(--green)}.grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(260px,1fr);gap:20px}.stack{display:grid;gap:20px;align-content:start}.panel{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px;min-width:0}.accent{background:#eaf1e7;border-color:#d7e4d4}.hero{min-height:302px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between}.hero-title{font-size:clamp(1.8rem,3.6vw,2.75rem);letter-spacing:-.05em;line-height:1.12;font-weight:550;margin:13px 0 16px}.hero p{font-size:.92rem}.hero-bottom{display:flex;align-items:center;justify-content:space-between;width:100%;gap:14px;padding-top:18px;border-top:1px solid #ceddcb;margin-top:14px}.sensor-label{font-size:.68rem;color:var(--muted)}.sensor-value{font-weight:650;font-size:.9rem;margin-top:2px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.split,.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.section-head h2{margin:0}.time-row,.metric-grid,.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.time-row,.metric-grid{margin-top:20px}.time-row strong{display:block;font-size:1.3rem;font-weight:600;letter-spacing:-.03em}.time-row span,.metric span{font-size:.72rem;color:var(--muted)}.week-dots{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:18px 0 12px}.week-dot{border-radius:7px;background:#eef2ec;color:#7b897e;text-align:center;padding:7px 0;font-size:.7rem}.week-dot[data-done=true]{background:#235f4c;color:white}.week-dot[data-current=true]{box-shadow:0 0 0 2px #b78835 inset}.week-dot[data-missed=true]{background:#f6e8d9;color:#84541e}.metric{padding-bottom:15px;border-bottom:1px solid var(--line)}.metric strong{display:block;font-size:1.65rem;letter-spacing:-.04em;font-weight:550;margin-top:4px}.full-row{margin-top:20px}details{margin:14px 0 0;border-top:1px solid var(--line);padding-top:14px}summary{font-size:.85rem;font-weight:650;cursor:pointer}details>p:first-of-type{margin-top:14px}details p,details small,details ol{font-size:.82rem}ol{padding-left:22px;font-size:.88rem}li{margin:8px 0}#dailyLog{list-style:none;padding:0;margin:16px 0 0}#dailyLog li{padding:12px 0;border-top:1px solid var(--line);font-size:.8rem;color:var(--muted)}.step-list{list-style:none;padding:0;margin:20px 0;counter-reset:steps}.step-list li{display:flex;gap:12px;align-items:flex-start;margin:17px 0;font-size:.88rem;counter-increment:steps}.step-list li:before{content:counter(steps);display:grid;place-items:center;flex-shrink:0;width:25px;height:25px;border-radius:8px;background:#e7eee3;color:#366343;font-size:.72rem;font-weight:700}.check{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#f9faf7;font-size:.82rem;margin:10px 0}.check input{margin:4px 0 0;width:16px;height:16px;flex-shrink:0;accent-color:var(--green)}label{display:block;font-size:.84rem;margin:14px 0 7px}input,select{border:1px solid #c5d2c7;border-radius:9px;background:white;color:#203e37;padding:10px 12px;max-width:100%;min-height:43px}input:disabled,select:disabled{background:#f2f4ef;color:#7d877e}input[type=number]{width:110px}input[type=text],input[type=password],input[type=time]{display:block;width:100%;margin-top:6px}.message{font-size:.82rem;color:var(--green);white-space:pre-wrap;padding:12px;background:#eef5ea;border-radius:9px;margin:12px 0 0;overflow-wrap:anywhere}.status{font-size:.87rem;overflow-wrap:anywhere}#tag{overflow-wrap:anywhere;font:.78rem ui-monospace,monospace}.callout{border-left:3px solid #b2c6a8;padding:5px 0 5px 14px;font-size:.83rem;color:#586852}.footer{border-top:1px solid var(--line);margin-top:28px;padding-top:16px;font-size:.7rem;color:#7d887e;display:flex;justify-content:space-between;gap:14px}.text-link{background:none;padding:0;min-height:32px;font-size:.8rem;color:var(--green);border-radius:0;text-decoration:underline;text-underline-offset:4px}.text-link:hover:not(:disabled){background:none;color:#0d4f3e}.section-anchor{scroll-margin-top:18px}@media(max-width:760px){.shell{padding-left:18px;padding-right:18px}.toprow{min-height:74px}.grid{grid-template-columns:1fr}.nav{justify-content:space-between;gap:4px}.nav button{min-width:58px;padding:12px 7px}.panel{padding:20px;border-radius:15px}.intro{margin-bottom:20px}.intro .badge{display:none}.hero{min-height:0}.workspace{padding-top:18px}.brand small{font-size:.58rem}.connection{font-size:.68rem}.test-notice{gap:12px;padding:13px}.test-notice button{padding:9px 12px;font-size:.78rem}.footer{flex-direction:column;gap:3px}.hero-bottom{align-items:flex-start}}
-.cards{display:grid;grid-template-columns:1fr 1fr 1.5fr;gap:20px;margin-top:20px}.stat{display:flex;flex-direction:column;gap:4px}.stat strong{font-size:2.1rem;font-weight:550;letter-spacing:-.04em;line-height:1.1;margin:6px 0 2px}.stat-label{font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}.stat .time-row{margin-top:12px}.env-line{margin:12px 4px 0}#weekPanel .week-dot{padding:10px 0;font-size:.78rem}.grid.full-row{margin-top:20px}.jump{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 22px}.jump a{border:1px solid var(--line);background:#fff;border-radius:30px;padding:8px 14px;font-size:.8rem;color:var(--green);text-decoration:none}.jump a:hover{background:#eaf0e9}#alignmentSection{align-self:start}.group-title{margin:34px 0 4px;font-size:1.3rem}.group-note{margin-bottom:16px}.hero .hero-title{max-width:22ch}.hero{min-height:0;gap:8px}@media(max-width:760px){.cards{grid-template-columns:1fr 1fr;gap:14px}.cards .timer{grid-column:1/-1}.stat strong{font-size:1.7rem}}</style></head><body>
+/* Shapes: cards and tiles 28px, inputs 16px, buttons, badges and nav are full pills. */
+:root{--bg:#e8f0e3;--bg2:#f4f8f1;--card:#fbfdf9;--ink:#17231b;--muted:#56665b;--line:#d8e3d2;--accent:#3d7a4c;--accent-soft:#d6ead9;--cta:#1d2a21;--cta-ink:#f4f8f1;--peach:#fbe2d3;--sky:#d9e9f1;--butter:#f5edc4;--warn-bg:#fbe4da;--warn-ink:#8a3a1f;--err-bg:#fbe0dc;--err-ink:#962c22;--ring:#c99a2e;--shadow:0 10px 30px rgb(61 104 70/.10)}
+@media(prefers-color-scheme:dark){:root{--bg:#111813;--bg2:#151d17;--card:#1b241d;--ink:#e6efe4;--muted:#a3b3a6;--line:#2a372d;--accent:#7fc08d;--accent-soft:#24392a;--cta:#e6efe4;--cta-ink:#111813;--peach:#3a281f;--sky:#1c2d35;--butter:#36311b;--warn-bg:#3d2419;--warn-ink:#f2b79c;--err-bg:#41201c;--err-ink:#f4aaa0;--ring:#e0b552;--shadow:0 10px 30px rgb(0 0 0/.35)}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:linear-gradient(180deg,var(--bg) 0,var(--bg2) 420px) fixed;min-height:100dvh;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p{margin-top:0}
+h1{font-size:clamp(2rem,5vw,2.9rem);font-weight:800;letter-spacing:-.04em;line-height:1.08;margin-bottom:10px}
+h2{font-size:1.2rem;font-weight:750;letter-spacing:-.02em;margin-bottom:12px}
+p{margin-bottom:14px}a{color:var(--accent)}
+small,.quiet,.note{color:var(--muted);font-size:.84rem}small{display:block;line-height:1.6}
+.eyebrow{font-size:.78rem;font-weight:650;color:var(--muted);margin-bottom:8px}
+button,input,select{font:inherit;color:inherit}
+button{border:0;border-radius:999px;background:var(--cta);color:var(--cta-ink);padding:12px 22px;font-size:.9rem;font-weight:700;cursor:pointer;min-height:46px;transition:transform .15s ease,opacity .15s ease}
+button:active:not(:disabled){transform:scale(.97)}
+button:disabled{opacity:.38;cursor:not-allowed}
+.secondary{background:var(--accent-soft);color:var(--ink)}
+.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--ring);outline-offset:3px}
+.shell{max-width:1080px;padding:0 24px;margin:auto}
+.topbar{padding-top:18px}
+.toprow{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:1.1rem;letter-spacing:-.03em}
+.brand small{font-size:.75rem;font-weight:500;letter-spacing:0;color:var(--muted)}
+.brand-mark{display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:var(--cta);color:var(--cta-ink);font-size:.8rem;font-weight:800}
+.connection{white-space:nowrap;display:flex;align-items:center;gap:8px;font-size:.78rem;font-weight:600;color:var(--muted);background:var(--card);border-radius:999px;padding:8px 14px;box-shadow:var(--shadow)}
+.connection:before{content:"";width:8px;height:8px;border-radius:50%;background:#a3aaa0}
+.connection[data-online=true]:before{background:#3fa35a}
+.nav{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10;display:flex;gap:6px;padding:6px;border-radius:999px;background:var(--cta);box-shadow:0 14px 40px rgb(20 40 26/.28)}
+.nav button{background:transparent;color:var(--cta-ink);opacity:.7;min-width:128px;padding:12px 22px}
+.nav button[aria-selected=true]{background:var(--cta-ink);color:var(--cta);opacity:1}
+.nav-note{margin-left:8px;font-size:.66rem;border-radius:999px;background:var(--butter);color:var(--ink);padding:2px 8px;vertical-align:1px}
+.workspace{padding-top:14px;padding-bottom:120px}
+.global-notice:empty,.message:empty{display:none}
+.global-notice{background:var(--accent-soft);color:var(--ink)}.global-notice,.alert{padding:13px 18px;border-radius:16px;margin-bottom:12px;font-size:.88rem}
+.alert{background:var(--warn-bg);color:var(--warn-ink)}.error{background:var(--err-bg);color:var(--err-ink)}
+.test-notice{display:flex;gap:16px;align-items:center;justify-content:space-between;background:var(--cta);color:var(--cta-ink);border-radius:28px;padding:14px 16px 14px 22px;margin-bottom:16px}
+.test-notice p{margin:0;font-size:.86rem}.test-notice button{flex-shrink:0;background:var(--cta-ink);color:var(--cta)}
+.intro{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin:18px 0 24px}
+.intro p{margin-bottom:0;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:7px 13px;background:var(--accent-soft);font-size:.76rem;font-weight:700;white-space:nowrap;color:var(--ink)}
+.panel{background:var(--card);border-radius:28px;padding:26px;min-width:0;box-shadow:var(--shadow)}
+.hero{position:relative;overflow:hidden;background:linear-gradient(135deg,var(--accent-soft),var(--card) 75%);display:flex;flex-direction:column;gap:10px}
+.hero>*{position:relative}.hero{min-height:340px}.mascot{position:absolute!important;right:34px;top:20px;height:232px;width:auto;pointer-events:none;filter:drop-shadow(0 10px 18px rgb(40 70 46/.18))}.hero-copy{max-width:calc(100% - 270px)}
+
+.hero-title{font-size:clamp(1.9rem,4.4vw,3rem);font-weight:800;letter-spacing:-.045em;line-height:1.06;margin:4px 0 12px;max-width:16ch}
+.hero p{max-width:46ch;color:var(--muted)}
+.hero-bottom{margin-top:auto!important;display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:16px;margin-top:8px;border-top:1px solid var(--line)}
+.sensor-label{font-size:.76rem;color:var(--muted)}.sensor-value{font-weight:750;font-size:1rem}
+.cards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:16px;margin-top:16px}.env{padding:20px 22px}.env-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}.env-pair span{font-size:.78rem;opacity:.7}.env-pair strong{display:block;font-size:1.6rem;margin:2px 0 0}.env p{margin:8px 0 0;font-size:.78rem}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat strong{font-size:2.3rem;font-weight:800;letter-spacing:-.05em;line-height:1.1;margin:6px 0 2px}
+.stat-label{font-size:.86rem;font-weight:700}
+.stat .quiet{color:var(--ink);opacity:.62}
+.tint-peach{background:var(--peach)}.tint-sky{background:var(--sky)}.tint-butter{background:var(--butter)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.split,.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.time-row,.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.time-row{margin-top:12px}.time-row span{font-size:.78rem;opacity:.7}
+.time-row strong{display:block;font-size:1.6rem;font-weight:800;letter-spacing:-.04em}
+.env-line{margin:12px 6px 0}
+.full-row{margin-top:16px}
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(260px,1fr);gap:16px}
+.week-dots{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin:8px 0 16px}
+.week-dot{display:grid;place-items:center;aspect-ratio:1;max-width:58px;width:100%;justify-self:center;border-radius:999px;background:var(--bg);color:var(--muted);font-weight:750;font-size:.95rem}
+.week-dot[data-done=true]{background:var(--accent);color:var(--cta-ink)}
+.week-dot[data-missed=true]{background:var(--peach);color:var(--warn-ink)}
+.week-dot[data-current=true]{box-shadow:0 0 0 3px var(--ring) inset}
+#weekProgress{font-size:1rem;font-weight:650;color:var(--muted);margin:-6px 0 0}.field-grid label{margin:4px 0}
+details{margin:14px 0 0;border-top:1px solid var(--line);padding-top:14px}
+summary{font-size:.9rem;font-weight:700;cursor:pointer;list-style-position:outside}
+details>p:first-of-type{margin-top:14px}details p,details small,details ol{font-size:.86rem}
+ol{padding-left:22px;font-size:.9rem}li{margin:8px 0}
+#dailyLog{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:8px}
+#dailyLog li{margin:0;padding:12px 16px;border-radius:16px;background:var(--bg2);font-size:.84rem;color:var(--muted)}
+.step-list{list-style:none;padding:0;margin:18px 0;counter-reset:steps}
+.step-list li{display:flex;gap:12px;align-items:flex-start;margin:14px 0;font-size:.9rem;counter-increment:steps}
+.step-list li:before{content:counter(steps);display:grid;place-items:center;flex-shrink:0;width:28px;height:28px;border-radius:999px;background:var(--accent-soft);font-size:.76rem;font-weight:800}
+.check{display:flex;align-items:flex-start;gap:10px;padding:13px 16px;border-radius:16px;background:var(--bg2);font-size:.86rem;margin:10px 0}
+.check input{margin:3px 0 0;width:18px;height:18px;flex-shrink:0;accent-color:var(--accent)}
+label{display:block;font-size:.86rem;font-weight:600;margin:14px 0 7px}
+input,select{border:1.5px solid var(--line);border-radius:16px;background:var(--card);padding:11px 14px;max-width:100%;min-height:46px}
+input:disabled,select:disabled{opacity:.55}
+input[type=number]{width:120px}
+input[type=text],input[type=password],input[type=time]{display:block;width:100%;margin-top:6px}
+.message{font-size:.86rem;color:var(--ink);white-space:pre-wrap;padding:12px 16px;background:var(--accent-soft);border-radius:16px;margin:12px 0 0;overflow-wrap:anywhere}
+.status{font-size:.92rem;overflow-wrap:anywhere}
+#tag{overflow-wrap:anywhere;font:.84rem ui-monospace,monospace}
+.footer{margin-top:28px;padding-top:16px;font-size:.76rem;color:var(--muted);display:flex;justify-content:space-between;gap:14px}
+.text-link{background:none;padding:0;min-height:32px;font-size:.86rem;color:var(--accent);border-radius:0;text-decoration:underline;text-underline-offset:4px}
+.section-anchor{scroll-margin-top:18px}
+.jump{display:flex;flex-wrap:wrap;gap:8px;margin:-8px 0 22px}
+.jump a{background:var(--card);border-radius:999px;padding:9px 16px;font-size:.84rem;font-weight:650;color:var(--ink);text-decoration:none;box-shadow:var(--shadow)}
+.group-title{margin:34px 0 4px;font-size:1.4rem;font-weight:800;letter-spacing:-.03em}.group-note{margin-bottom:16px}
+#alignmentSection{align-self:start}
+@media(max-width:760px){.shell{padding-left:16px;padding-right:16px}.grid{grid-template-columns:1fr}.cards{grid-template-columns:1fr;gap:12px}.stat strong{font-size:1.9rem}.env-pair strong{font-size:1.5rem}.panel{padding:22px;border-radius:24px}.intro{flex-direction:column;align-items:flex-start;gap:10px;margin-top:10px}.nav button{min-width:118px}.footer{flex-direction:column;gap:3px}.brand small{display:none}.hero{min-height:0}.mascot{position:static!important;height:170px;align-self:center;margin:-4px 0 2px}.hero-copy{max-width:none}.week-dots{gap:6px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style></head><body>
 <header class="topbar"><div class="shell"><div class="toprow"><div class="brand"><span class="brand-mark" aria-hidden="true">PV</span><div>PharmaVault<small>A little care. Every day.</small></div></div><span id="connectionState" class="connection" role="status">Connecting</span></div>
-<nav class="nav" role="tablist" aria-label="Dashboard views"><button id="navToday" role="tab" aria-controls="viewToday" aria-selected="true" tabindex="0">Dashboard<span id="refillDot" class="nav-note" hidden>Refill due</span></button><button id="navSettings" role="tab" aria-controls="viewSettings" aria-selected="false" tabindex="-1">Settings<span id="testDot" class="nav-note" hidden>Test on</span></button></nav></div></header>
+</div></header>
+<nav class="nav" role="tablist" aria-label="Dashboard views"><button id="navToday" role="tab" aria-controls="viewToday" aria-selected="true" tabindex="0">Dashboard<span id="refillDot" class="nav-note" hidden>Refill due</span></button><button id="navSettings" role="tab" aria-controls="viewSettings" aria-selected="false" tabindex="-1">Settings<span id="testDot" class="nav-note" hidden>Test on</span></button></nav>
 <main class="shell workspace">
 <div id="connectionNotice" class="global-notice error" role="alert" hidden></div><p id="bridgeStatus" class="global-notice" role="status">Checking healthcare-station link...</p><p id="motionNotice" class="global-notice" role="status" hidden></p><p id="storage" class="global-notice error" role="alert"></p>
 <div id="globalTest" class="test-notice" hidden><p id="irTestBanner" role="alert" hidden></p><button id="quickStopTest" type="button" disabled>Stop test</button></div>
 <p id="overdueAlert" class="alert" role="alert" hidden></p><p id="weekRefillAlert" class="alert" role="alert" hidden></p><p id="globalActionMessage" class="message" role="status"></p>
 
 <div id="viewToday" role="tabpanel" aria-labelledby="navToday">
-<div class="intro"><div><p class="eyebrow" id="overviewDate">YOUR DAILY OVERVIEW</p><h1>Hello. Here's today.</h1><p>Your dose, storage and this week's pack on one page.</p></div><span id="modeBadge" class="badge">Connecting</span></div>
+<div class="intro"><div><p class="eyebrow" id="overviewDate">YOUR DAILY OVERVIEW</p><h1>Welcome back.</h1><p>Here's your pillbox today.</p></div><span id="modeBadge" class="badge">Connecting</span></div>
 
-<section id="todayPanel" class="section-anchor"><div class="panel accent hero"><div><span class="eyebrow" id="todayMedicine">TODAY'S MEDICINE</span><h2 id="heroTitle" class="hero-title">Connecting to your dispenser.</h2><p id="todayDetail">Your current status will appear here.</p><button id="nextAction" type="button" disabled>View setup</button></div><div class="hero-bottom"><div><div class="sensor-label">HAND SENSOR</div><div class="sensor-value" id="irSignal">Unknown</div></div><span class="badge" id="todaySlot">—</span></div></div></section>
+<section id="todayPanel" class="section-anchor"><div class="panel hero"><img class="mascot" src="/mascot.webp" alt="" width="342" height="360"><div class="hero-copy"><span class="badge" id="todayMedicine">TODAY'S MEDICINE</span><h2 id="heroTitle" class="hero-title">Connecting to your dispenser.</h2><p id="todayDetail">Your current status will appear here.</p><button id="nextAction" type="button" disabled>View setup</button></div><div class="hero-bottom"><div><div class="sensor-label">Hand sensor</div><div class="sensor-value" id="irSignal">Unknown</div></div><span class="badge" id="todaySlot">-</span></div></div></section>
 
 <div class="cards">
-<section class="panel stat"><span class="stat-label">Temperature</span><strong id="temp">—</strong><span class="quiet">Inside the pillbox</span></section>
-<section class="panel stat"><span class="stat-label">Humidity</span><strong id="rh">—</strong><span class="quiet">Inside the pillbox</span></section>
-<section class="panel stat timer"><div class="split"><span class="stat-label">Daily timer</span><span id="scheduleBadge" class="badge">—</span></div><div class="time-row"><div><span>Dose ready</span><strong id="summaryDue">—</strong></div><div><span>Overdue at</span><strong id="summaryAlert">—</strong></div></div><div class="row" style="margin-top:16px"><button id="manageSchedule" class="ghost" type="button">Change times</button><button id="quickPause" class="secondary" type="button" disabled>Pause</button></div></section>
+<section class="panel stat env tint-peach"><span class="stat-label">Inside the pillbox</span><div class="env-pair"><div><span>Temperature</span><strong id="temp">-</strong></div><div><span>Humidity</span><strong id="rh">-</strong></div></div><p id="environment" class="quiet" role="status">Waiting for sensor readings.</p></section>
+<section class="panel stat timer tint-butter"><div class="split"><span class="stat-label">Daily timer</span><span id="scheduleBadge" class="badge">-</span></div><div class="time-row"><div><span>Dose ready</span><strong id="summaryDue">-</strong></div><div><span>Overdue at</span><strong id="summaryAlert">-</strong></div></div><div class="row" style="margin-top:16px"><button id="manageSchedule" class="ghost" type="button">Change times</button><button id="quickPause" class="secondary" type="button" disabled>Pause</button></div></section>
 </div>
-<p id="environment" class="env-line quiet" role="status">Waiting for sensor readings.</p>
 
-<section id="weekPanel" class="panel full-row section-anchor"><div class="section-head"><div><p class="eyebrow">THIS WEEK'S PACK</p><h2 id="weekProgress">Not started</h2></div><span id="weekShort" class="badge">—</span></div>
+
+<section id="weekPanel" class="panel full-row section-anchor"><div class="section-head" style="margin-bottom:8px"><div><h2>This week</h2><p id="weekProgress">Not started</p></div><span id="weekShort" class="badge">-</span></div>
 <div class="week-dots" id="weekDots" aria-label="Seven scheduled days"></div><p id="weekSummary" class="quiet" style="margin:0">Waiting for weekly status.</p><p id="weekDates" class="quiet" style="margin:6px 0 0"></p>
 <details id="refillDetails"><summary>Refill the week</summary><p id="weekStatus" class="status" role="status">Waiting for weekly status.</p><ol class="step-list"><li><div><strong>Pause and clear.</strong><br>Remove old or missed medicine first.</div></li><li><div><strong>Park at empty compartment 8.</strong><br>Don't pass loaded compartments across the outlet.</div></li><li><div><strong>Fill compartments 1 to 7.</strong><br>Each day's medicine goes in its own compartment.</div></li></ol><label class="check"><input id="weekFilledConfirm" type="checkbox" disabled><span>Old medicine removed; compartments 1 to 7 hold the right day's medicine.</span></label><label class="check"><input id="weekParkedConfirm" type="checkbox" disabled><span>Empty compartment 8 is at the outlet.</span></label><button id="refillWeek" type="button" disabled style="margin-top:8px">Start the seven-day pack</button><p id="weekMessage" class="message" role="status"></p><p id="weekNextStart" class="quiet" style="margin:16px 0 0"></p></details>
 <details><summary>Which compartment is which day</summary><ol id="weekCompartments"></ol></details>
@@ -204,18 +300,18 @@ static const char DashboardHtml[] PROGMEM = R"PVHTML(
 </div>
 
 <div id="viewSettings" role="tabpanel" aria-labelledby="navSettings" hidden>
-<div class="intro"><div><p class="eyebrow">SET UP ONCE</p><h1>Settings</h1><p>Pause the schedule before changing settings or handling the carousel.</p></div><span class="badge">Singapore · UTC+8</span></div>
+<div class="intro"><div><h1>Settings</h1><p>Pause the schedule before changing settings or handling the carousel.</p></div><span class="badge">Singapore, UTC+8</span></div>
 <nav class="jump" aria-label="Settings sections"><a href="#scheduleSection">Clock &amp; timer</a><a href="#alignmentSection">Carousel</a><a href="#irTestPanel">Test mode</a><a href="#wifiSection">Wi-Fi</a></nav>
 
 <div class="grid"><section class="panel section-anchor" id="scheduleSection"><h2>Clock &amp; daily timer</h2><p id="clockStatus" class="status" role="status"></p><button id="syncClock" type="button" class="ghost" disabled>Sync clock from this device</button><p id="clockMessage" class="message" role="status"></p><div class="field-grid"><label>Dose ready at<input id="scheduleTime" type="time" value="13:00" required></label><label>Overdue alert at<input id="deadlineTime" type="time" value="14:00" required></label></div><small>The alert must be later the same day. Times repeat every day.</small><label class="check"><input id="scheduleConfirm" type="checkbox"><span>I checked the date, times, carousel position and hand sensor.</span></label><div class="row" style="margin-top:14px"><button id="saveSchedule" type="button" class="secondary" disabled>Save times</button><button id="enableSchedule" type="button" disabled>Enable schedule</button><button id="pauseSchedule" type="button" class="ghost" disabled>Pause schedule</button></div><p id="scheduleStatus" class="quiet" style="margin-top:16px"></p><p id="scheduleMessage" class="message" role="status"></p><details><summary>After a restart or a missed day</summary><p>After a restart, sync the clock, confirm the carousel position, then enable. Times and past doses stay saved.</p><p>If a day was missed, remove its medicine before aligning the compartment before today's. Don't rotate past a loaded missed compartment.</p><p>At the dose time the dose becomes ready without moving. A fresh hand turns the motor. An overdue dose stays available until midnight. A failed attempt never retries by itself.</p></details></section>
 
 <section class="panel section-anchor" id="alignmentSection"><h2>Carousel</h2><details id="alignmentDetails"><summary>Confirm which compartment is at the outlet</summary><p id="alignmentStatus" class="status" role="status"></p><label>Compartment at the outlet now<select id="alignedSlot"><option value="">Choose after checking</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><label class="check"><input id="alignmentConfirm" type="checkbox"><span>I removed any missed medicine and checked the position, without moving loaded missed compartments past the outlet.</span></label><button id="confirmAlignment" type="button" disabled>Confirm position</button><p id="alignmentMessage" class="message" role="status"></p><small>Before day N, align compartment N−1 (empty 8 before day 1). This does not move the motor.</small></details>
-<details id="motorDetails"><summary>Motor steps and manual jog</summary><p>Use an empty carousel. Saving or jogging cancels a pending dose and needs the position confirmed again.</p><label>Half-steps per compartment <input id="stepsPerSlot" type="number" min="1" max="4096" step="1" value="512"></label><label>Direction <select id="stepDirection"><option value="1">Forward</option><option value="-1">Reverse</option></select></label><label class="check"><input id="stepperConfirm" type="checkbox"><span>Carousel empty; step count and direction checked.</span></label><button id="saveStepper" type="button" disabled>Save motor settings</button><small style="margin-top:12px">512 is the starting value for eight compartments.</small><label>Jog half-steps <input id="jogSteps" type="number" min="1" max="512" step="1" value="16"></label><label class="check"><input id="jogConfirm" type="checkbox"><span>The carousel is empty and clear; a jog can release anything left inside.</span></label><div class="row"><button id="jogBack" type="button" class="secondary" disabled>Jog backward</button><button id="jogForward" type="button" class="secondary" disabled>Jog forward</button></div><p id="stepperMessage" class="message" role="status"></p><p class="quiet" style="margin-top:14px">ULN2003 IN1–4 → GPIO5, 6, 7, 8. Driver on 5 V and common ground.</p></details></section></div>
+<details id="motorDetails"><summary>Motor steps and manual jog</summary><p>Use an empty carousel. Saving or jogging cancels a pending dose and needs the position confirmed again.</p><label>Half-steps per compartment <input id="stepsPerSlot" type="number" min="1" max="4096" step="1" value="512"></label><label>Direction <select id="stepDirection"><option value="1">Forward</option><option value="-1">Reverse</option></select></label><label class="check"><input id="stepperConfirm" type="checkbox"><span>Carousel empty; step count and direction checked.</span></label><button id="saveStepper" type="button" disabled>Save motor settings</button><small style="margin-top:12px">512 is the starting value for eight compartments.</small><label>Jog half-steps <input id="jogSteps" type="number" min="1" max="512" step="1" value="16"></label><label class="check"><input id="jogConfirm" type="checkbox"><span>The carousel is empty and clear; a jog can release anything left inside.</span></label><div class="row"><button id="jogBack" type="button" class="secondary" disabled>Jog backward</button><button id="jogForward" type="button" class="secondary" disabled>Jog forward</button></div><p id="stepperMessage" class="message" role="status"></p><p class="quiet" style="margin-top:14px">ULN2003 IN1-4 → GPIO5, 6, 7, 8. Driver on 5 V and common ground.</p></details></section></div>
 
 <h2 class="group-title">Test mode</h2><p class="quiet group-note">Use an empty carousel or dummy contents. Starting a test pauses the daily schedule.</p>
 <div class="grid"><section id="irTestPanel" class="panel section-anchor"><div class="split"><h2>Hand and motor test</h2><span class="badge"><span id="irTestCount">0</span>&nbsp;cycles</span></div><p id="irTestStatus" class="status" role="status"></p><p id="irTestGesture" class="quiet" role="status"></p><label class="check"><input id="irTestConfirm" type="checkbox"><span>The carousel is empty or holds dummy contents, and nothing is in the way.</span></label><div class="row" style="margin-top:16px"><button id="startIrTest" type="button" disabled>Start test mode</button><button id="stopIrTest" type="button" class="secondary" disabled>Stop test mode</button></div><p id="irTestMessage" class="message" role="status"></p><details><summary>How to test</summary><ol class="step-list"><li><div><strong>Keep clear for 1 second.</strong></div></li><li><div><strong>Hold a hand for 1.5 seconds.</strong><br>The carousel turns one compartment.</div></li><li><div><strong>Remove your hand.</strong><br>Wait 3 seconds, keep clear for 1 second, then repeat.</div></li></ol><small>Stop test mode and confirm the position before enabling the daily schedule. Closing this page does not stop test mode.</small></details></section>
 <section id="timerTestPanel" class="panel"><h2>Timer and overdue test</h2><p class="quiet">A quick run of the daily timing: ready after 10 s, overdue after 30 s. It doesn't change saved times or the week. Tick the confirmation in the hand test first.</p><div class="field-grid"><p>Ready in<br><strong id="timerTestReady">Not started</strong></p><p>Overdue in<br><strong id="timerTestDeadline">Not started</strong></p></div><p id="timerTestStatus" class="status" role="status"></p><p id="timerTestAlert" class="overdue" role="alert" hidden></p><button id="startTimerTest" type="button" disabled>Start timer test</button><p id="timerTestMessage" class="message" role="status"></p><small>Use Stop test mode to finish. Test results are kept apart from the daily history.</small></section></div>
-<section id="irDetails" class="panel full-row"><h2>Hand sensor</h2><p id="irStatus" class="quiet" role="status"></p><details><summary>Sensor diagnostics and wiring</summary><p id="irDiagnostic" class="quiet"></p><p>IR VCC → 3.3 V · GND → ground · OUT → GPIO14. LOW means hand, HIGH means clear.</p><small>If it always detects a hand, turn the sensitivity screw or re-aim the sensor.</small></details></section>
+<section id="irDetails" class="panel full-row"><h2>Hand sensor</h2><p id="irStatus" class="quiet" role="status"></p><details><summary>Sensor diagnostics and wiring</summary><p id="irDiagnostic" class="quiet"></p><p>IR VCC → 3.3 V, GND → ground, OUT → GPIO14. LOW means hand, HIGH means clear.</p><small>If it always detects a hand, turn the sensitivity screw or re-aim the sensor.</small></details></section>
 
 <section id="wifiSection" class="panel full-row section-anchor"><h2>Wi-Fi</h2><p id="networkStatus" class="quiet"></p><details><summary>Join another network</summary><form id="wifiForm"><label>Wi-Fi name<input id="ssid" type="text" maxlength="32" autocomplete="off" required></label><label>Password<input id="wifiPassword" type="password" maxlength="63" autocomplete="new-password"></label><small>2.4 GHz home network. The PharmaVault Wi-Fi stays on as well.</small><button id="joinWifi" disabled style="margin-top:14px">Save &amp; connect</button></form><p id="wifiMessage" class="message" role="status"></p></details></section>
 </div>
@@ -366,7 +462,7 @@ function renderIr() {
   el('irStatus').textContent=state.motionActive?'Movement in progress; waiting for new hand-sensor readings.':
     !directMode?'Waiting for the direct IR firmware with fixed 1.5-second hand detection.':irInstruction()+(reported?'':' Waiting for a sensor update.');
   const level=value=>value===0?'LOW (hand)':value===1?'HIGH (clear)':'unavailable';
-  el('irDiagnostic').textContent='Last received GPIO14: '+(rawValid?level(state.irRaw):'unavailable')+' · Reported steady interval '+(Number.isFinite(state.irStableMs)?state.irStableMs:0)+' ms · Sample age on receipt '+(Number.isFinite(age)&&age>=0?age+' ms':'unknown');
+  el('irDiagnostic').textContent='Last received GPIO14: '+(rawValid?level(state.irRaw):'unavailable')+'. Reported steady interval '+(Number.isFinite(state.irStableMs)?state.irStableMs:0)+' ms. Sample age on receipt '+(Number.isFinite(age)&&age>=0?age+' ms':'unknown');
   if(reported)irDisplayTimer=setTimeout(()=>invalidateIr('No recent sensor update. '+irInstruction()),irDisplayMaxAgeMs+1-age);
 }
 function timerTestFieldsValid() {
@@ -406,14 +502,14 @@ function renderWeek() {
   const configured=state.weekConfigured===true, due=state.weekRefillDue===true;
   const elapsed=integer(state.weekDay,0,7);
   el('weekProgress').textContent=configured&&elapsed!==null?elapsed+' / 7 scheduled days':'Not started';
-  el('weekDates').textContent=configured&&integer(state.weekStartDay,1,1000000)!==null?dayText(state.weekStartDay)+' through '+dayText(state.weekStartDay+6)+' · Singapore dates':'Seven medicine compartments; compartment 8 stays empty for parking.';
+  el('weekDates').textContent=configured&&integer(state.weekStartDay,1,1000000)!==null?dayText(state.weekStartDay)+' through '+dayText(state.weekStartDay+6)+', Singapore dates':'Seven medicine compartments; compartment 8 stays empty for parking.';
   el('weekStatus').textContent=state.weekStatus||'Waiting for weekly refill status.';
   el('weekRefillAlert').hidden=!due;
   el('weekRefillAlert').textContent=due?'Weekly refill due. Remove remaining medicine, refill all seven days and park at empty 8. Open Refill to confirm.':'';
   el('weekPanel').classList.toggle('overdue',Boolean(due));
   el('weekNextStart').textContent=Number.isInteger(state.weekNextStartDay)&&state.weekNextStartDay>0?'When confirmed, the next week starts '+dayText(state.weekNextStartDay)+' using the saved daily times. If a daily record already exists today, the next week starts tomorrow.':'Set the clock to show the start date for a new week.';
   el('refillWeek').textContent=configured?'Confirm refill & start next week':'Confirm pack & start week';
-  list('weekCompartments',configured&&Number.isInteger(state.weekStartDay)&&state.weekStartDay>0?Array.from({length:7},(_,i)=>'Day '+(i+1)+' · '+dayText(state.weekStartDay+i)+' · compartment '+(i+1)):['Load Day 1 medicine into compartment 1, through Day 7 into compartment 7. Leave compartment 8 empty.']);
+  list('weekCompartments',configured&&Number.isInteger(state.weekStartDay)&&state.weekStartDay>0?Array.from({length:7},(_,i)=>'Day '+(i+1)+', '+dayText(state.weekStartDay+i)+', compartment '+(i+1)):['Load Day 1 medicine into compartment 1, through Day 7 into compartment 7. Leave compartment 8 empty.']);
 }
 function renderToday() {
   const today=state.today||{};
@@ -423,13 +519,13 @@ function renderToday() {
   el('todayMedicine').textContent=integer(today.slot,1,7)!==null?'Day '+today.slot+' medicine pack':'No medicine pack due';
   el('todayDetail').textContent=state.irTestMode?'Use the test-mode panel above. Test rotations do not complete or reset a daily dose.':state.motionActive?state.motionText||'Mechanism moving.':state.handStatus||state.systemStatus||'';
   el('lastAction').textContent=today.completedAt?'Completion recorded: '+clockText(today.completedAt):today.preparedAt?'Armed at: '+clockText(today.preparedAt):'';
-  el('doseWindow').textContent='Singapore time · daily ready time '+timeInput(state.dueMinute)+' · overdue alert '+timeInput(state.alertMinute)+' · hand hold '+(state.handHoldMs/1000).toFixed(1)+' seconds';
+  el('doseWindow').textContent='Singapore time. Ready at '+timeInput(state.dueMinute)+', overdue alert at '+timeInput(state.alertMinute)+', hand hold '+(state.handHoldMs/1000).toFixed(1)+' seconds';
   const overdue=today.overdue===true&&!today.completedAt;
   el('overdueAlert').hidden=!overdue;
   el('overdueAlert').textContent=overdue?'Dose overdue. Check the dispenser. An eligible late dose remains available until midnight.':'';
   el('todayPanel').className=overdue?'overdue':'';
   const history=Array.isArray(state.history)?[...state.history].sort((a,b)=>b.day-a.day):[];
-  list('dailyLog',history.length?history.map(item=>dayText(item.day)+' · compartment '+(item.slot||'—')+' · '+(integer(item.slot,1,7)!==null?'Day '+item.slot+' pack':'Saved record')+' · '+item.status+(item.overdue?' · overdue recorded':'')+(item.completedAt?' · completed '+clockText(item.completedAt):'')):['No recorded daily events yet.']);
+  list('dailyLog',history.length?history.map(item=>dayText(item.day)+', compartment '+(item.slot||'-')+'. '+(integer(item.slot,1,7)!==null?'Day '+item.slot+' pack':'Saved record')+': '+item.status+(item.overdue?', overdue recorded':'')+(item.completedAt?', completed '+clockText(item.completedAt):'')):['No recorded daily events yet.']);
   const alerts=Array.isArray(state.alerts)?state.alerts:[];
   el('alertSummary').hidden=alerts.length===0;
   el('alertSummary').textContent=alerts.length?alerts.length+' retained overdue record'+(alerts.length===1?'':'s')+' without a completed dose. Review the dated entries below.':'No retained overdue records awaiting completion.';
@@ -453,7 +549,7 @@ async function refresh() {
       const preceding=pending?(state.today.slot+6)%8+1:0;
       el('alignmentStatus').textContent=state.positionKnown?'Current aligned/last released compartment: '+state.currentSlot+'. Next physical step reaches compartment '+(state.currentSlot%8+1)+'. Calendar-day eligibility is checked separately; no loaded missed compartment is skipped automatically.':
         pending?'Position unknown. Pause, manually remove any missed medicine, and visually confirm the preceding compartment '+preceding+' to release today’s day-specific compartment '+state.today.slot+'. Do not rotate past a loaded missed compartment.':'Position unknown. With the schedule paused, manually remove missed medicine and verify the current compartment. A new week must start at empty parking compartment 8.';
-      el('networkStatus').textContent=state.lanIp?'Same-Wi-Fi dashboard: http://'+state.lanIp+' · Access point: http://192.168.4.1':'ESP32 access point: http://192.168.4.1';
+      el('networkStatus').textContent=state.lanIp?'Same-Wi-Fi dashboard: http://'+state.lanIp+'. Access point: http://192.168.4.1':'ESP32 access point: http://192.168.4.1';
       el('bridgeStatus').textContent=state.bridgeOnline===true?'Healthcare station connected: pillbox readings/status are sent to the MSP430.':'Healthcare station disconnected. Pillbox sensors and dispensing continue locally.';
 
       renderIr();renderToday();renderIrTest();renderWeek();renderRefillInstructions();
@@ -475,7 +571,7 @@ async function refresh() {
       if(!el('timerTestAlert').hidden)el('timerTestAlert').textContent='LAST RECEIVED TEST ALERT: overdue. Reconnect to verify the current test state.';
       el('weekStatus').textContent='Connection lost. Weekly progress and dates are last received; reconnect before refilling or enabling dispensing.';
       if(!el('weekRefillAlert').hidden)el('weekRefillAlert').textContent='LAST RECEIVED ALERT: weekly refill due. Reconnect to verify the current weekly state.';
-      el('todayStatus').textContent='Connection lost — daily operating state is unknown. Check the device.';
+      el('todayStatus').textContent='Connection lost. Daily operating state is unknown. Check the device.';
       el('clockStatus').textContent='No current clock reading from the ESP32.';
       if(!el('overdueAlert').hidden)el('overdueAlert').textContent='LAST RECEIVED ALERT: dose overdue. Reconnect to check its current status.';
       if(!el('alertSummary').hidden)el('alertSummary').textContent='LAST RECEIVED ALERT: overdue records remain. Reconnect to check their current status.';
@@ -577,7 +673,7 @@ function renderOverview() {
   el('modeBadge').textContent=!live?'Offline':state.motionActive?'Moving':state.irTestMode?'Test mode':state.weekRefillDue?'Refill due':state.scheduleEnabled?'Daily mode':'Paused';
   el('overviewDate').textContent=live&&state.clockSynced?new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',weekday:'long',day:'numeric',month:'long'}).format(new Date(state.epoch*1000)):'YOUR DAILY OVERVIEW';
   el('weekShort').textContent=state.weekConfigured?(integer(state.weekDay,0,7)??0)+' / 7 days':'Not started';
-  el('weekSummary').textContent=!live?'Last received pack status. Reconnect to verify.':state.weekRefillDue?'All seven scheduled days are finished. Refill the whole pack.':!state.weekConfigured?'Seven medicine compartments. One empty parking position.':dayText(state.weekStartDay)+' – '+dayText(state.weekStartDay+6)+' · missed days still count';
+  el('weekSummary').textContent=!live?'Last received pack status. Reconnect to verify.':state.weekRefillDue?'All seven scheduled days are finished. Refill the whole pack.':!state.weekConfigured?'Seven medicine compartments. One empty parking position.':dayText(state.weekStartDay)+' to '+dayText(state.weekStartDay+6)+'. Missed days still count';
   const localDay=state.clockSynced?Math.floor((state.epoch+28800)/86400):0;
   const slot=state.weekConfigured&&localDay>=state.weekStartDay&&localDay<state.weekStartDay+7?localDay-state.weekStartDay+1:0;
   el('weekDots').replaceChildren(...Array.from({length:7},(_,i)=>{
@@ -600,7 +696,7 @@ function renderOverview() {
   if(!live) {
     title='Let’s reconnect.';detail='The current operating state is unknown. Reconnect to the dispenser before making changes.';
     action='Settings unavailable';
-    el('temp').textContent=el('rh').textContent='—';
+    el('temp').textContent=el('rh').textContent='-';
     el('environment').textContent='Connection lost. Current readings unavailable.';
   } else if(!state.storageOk) {
     title='The dispenser needs attention.';action='View settings';
@@ -617,7 +713,7 @@ function renderOverview() {
   } else if(!state.stepperVerified) {
     title='Set up the carousel.';detail='Verify one-compartment travel and direction on the unloaded mechanism.';action='Open motor setup';nextSection='motorDetails';
   } else if(!state.weekConfigured) {
-    title='Prepare your seven-day pack.';detail='Fill days 1–7, leave position 8 empty, then confirm once for the whole week.';action='Set up weekly pack';nextView='Refill';nextSection='';
+    title='Prepare your seven-day pack.';detail='Fill days 1 to 7, leave position 8 empty, then confirm once for the whole week.';action='Set up weekly pack';nextView='Refill';nextSection='';
   } else if(['FAULT','ATTEMPTED','MISSED'].includes(record.status)) {
     title='Today’s dose needs checking.';detail='An unsuccessful or uncertain attempt cannot automatically retry. Inspect the medicine and mechanism.';action='Review alignment';nextSection='alignmentSection';
   } else if(!state.positionKnown||wrongPosition) {
@@ -1313,7 +1409,7 @@ class PharmaVault {
     if(!saveBytes("network",&updated,sizeof(updated))){requireStorage();return;}network=updated;networkQueued=true;web.send(200,"text/plain","Wi-Fi saved. The ESP32 access point remains available.");
   }
   void startWeb(){
-    web.on("/",HTTP_GET,[this]{if(!authorize())return;noCache();web.send_P(200,"text/html; charset=utf-8",DashboardHtml);});web.on("/state",HTTP_GET,[this]{sendState();});
+    web.on("/",HTTP_GET,[this]{if(!authorize())return;noCache();web.send_P(200,"text/html; charset=utf-8",DashboardHtml);});web.on("/state",HTTP_GET,[this]{sendState();});web.on("/mascot.webp",HTTP_GET,[this]{if(!authorize())return;web.sendHeader("Cache-Control","private, max-age=86400");web.send_P(200,"image/webp",reinterpret_cast<const char*>(PvMascotWebp),sizeof(PvMascotWebp));});
     web.on("/test/mode",HTTP_POST,[this]{setIrTestMode();});
     web.on("/clock",HTTP_POST,[this]{setClock();});web.on("/schedule/save",HTTP_POST,[this]{saveSchedule();});web.on("/schedule/mode",HTTP_POST,[this]{setScheduleMode();});
     web.on("/stepper/save",HTTP_POST,[this]{saveStepper();});web.on("/stepper/jog",HTTP_POST,[this]{jogStepper();});web.on("/stepper/align",HTTP_POST,[this]{alignStepper();});
