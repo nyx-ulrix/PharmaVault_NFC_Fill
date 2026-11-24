@@ -1,0 +1,48 @@
+PHARMAVAULT SINGLE STEPPER - CONNECTION REFERENCE
+Power off BOTH USB boards before rewiring. Use printed GPIO/IO numbers,
+not physical header-position numbers or old FireBeetle D-number aliases.
+
+28BYJ-48 AND ULN2003
+ULN2003 IN1 -> ESP32 GPIO5 / IO5
+ULN2003 IN2 -> ESP32 GPIO6 / IO6
+ULN2003 IN3 -> ESP32 GPIO7 / IO7
+ULN2003 IN4 -> ESP32 GPIO8 / IO8
+28BYJ-48 five-wire plug -> matching white ULN2003 motor socket
+ULN2003 + / VCC -> confirmed laptop-USB-derived5V supply rail
+ULN2003 - / GND -> common ground
+Never power this motor from3V3 or connect coil wires directly to GPIO.
+Verify USB power under load: a5V pin label alone does not prove enough current.
+Coils switch off between moves. Keep separate USB supplies' positive5V rails
+separate; join their grounds.
+
+REMOVE BOTH SERVOS
+Disconnect SG90 and SG92R entirely: signal, red power and ground wires.
+ESP32 GPIO3 is unused/input; no motor or other signal connects to it.
+GPIO5 is now ULN2003 IN1, not a servo signal.
+
+IR HAND SENSOR
+VCC -> ESP32 3.3V /3V3
+GND -> common ground
+OUT -> ESP32 GPIO14 /IO14 directly
+Follow VCC/GND/OUT markings; header order varies. This direct connection
+requires the IR module to operate at3.3V. Mount near the receiving hand below
+the outlet. Your rotating carousel releases pills; IR requests that movement.
+Remove HC-SR04 and its2.2k/3.2k ECHO divider; leaveGPIO13 unused.
+KEEP the separate NTC thermistor divider.
+
+MCU UART (UNCHANGED,9600BAUD,8N1)
+MSP430 P3.3 /Booster H2.4 TX -> ESP32 GPIO4 RX
+ESP32 GPIO17 TX -> MSP430 P3.4 /Booster H2.3 RX
+MSP430 GND -> ESP32 GND
+Both UART signals use3.3V logic, never a motor supply rail.
+
+MSP430 SENSORS (UNCHANGED)
+NTC: target3.3V/H2.1 -> fixed10k resistor -> P7.0/A12/H2.28 junction
+     junction ->10k NTC(B3950) ->GND. Booster J2 stays OPEN.
+DHT11 DATA ->P1.5/H2.38; VCC3.3V; GNDcommon.
+RC522 VCC3.3V; GNDcommon; MOSI P3.0/H2.15; MISO P3.1/H2.14;
+      SCK P3.2/H2.7; SDA/SS P2.3/H2.12; RST P1.6/H2.5; IRQ unused.
+LCD: fitted Booster H3 connection remains unchanged.
+Booster LEDs and existing working power jumpers remain as assembled.
+Booster GND H2.20/H2.22; USB5V H2.21 only where that rail is confirmed.
+No HOME/INDEX/GATE switches, extra buttons, servo or RTC module is used.

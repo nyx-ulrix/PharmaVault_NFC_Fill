@@ -1,0 +1,29 @@
+PILLBOX SENSOR MODULE VALIDATION
+17 November 2026
+
+Command: run tests/run.cmd from the tests directory.
+Compiler: installed Microsoft Visual C++ 2026 C++17 host compiler.
+The test compiles the actual modified DHT.cpp and PvPillboxSensors.h.
+Arduino GPIO, clocks, ADC and interrupts are simulated. DHT reads consume
+simulated pulse waveforms, rather than a stubbed DHT return value.
+
+PASS: DHT11 decimal fraction decoding (53.5% RH, 22.1 C), single cached
+transaction, and previous negative-value format.
+PASS: Reject bad checksum, fractional fields, reserved bits and out-of-range
+values. A failed DHT reading preserves a valid NTC reading and raises a fault.
+PASS: Missing response and a line stuck during the data frame abort within
+30 ms in these specific test cases; interrupts are restored afterward.
+PASS: Calibrated ADC millivolts are averaged across 16 readings; 1650 mV yields
+25.00 C for the configured divider. Open, short and saturation are invalid.
+PASS: Temperature/humidity warnings and independent sensor-fault bits.
+PASS: Two-second startup, five-second repeat interval, idle permission gate,
+sixteen-second freshness expiry, and sampling across 32-bit millis rollover.
+
+The unchanged upstream DHT conversion code emits host compiler warnings for
+double-to-float conversions. Tests finished with exit code 0.
+
+This verifies software decoding and scheduling logic. It does not verify
+physical DHT electrical timing, NTC resistor tolerance, the actual 3V3 rail,
+the installed sensor's accuracy, or motor-power interference. The root release
+build must compile these files for ESP32-S3 and the team must test live readings.
+Do not interpret the host test as an upload or an on-board hardware test.

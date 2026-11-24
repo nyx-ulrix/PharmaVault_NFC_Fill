@@ -1,0 +1,27 @@
+Official sources checked for this release, 17 November 2026:
+Original FireBeetle V1.0 schematic and GPIO16/D11, GPIO17/D10:
+https://dfimg.dfrobot.com/nobody/wiki/fd28d987619c16281bdc4f40990e5a1c.PDF
+DFR0654 board and USB driver:
+https://wiki.dfrobot.com/dfr0654/
+Arduino IDE:
+https://www.arduino.cc/en/software
+Espressif Arduino setup:
+https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html
+CCS:
+https://www.ti.com/tool/CCSTUDIO
+https://software-dl.ti.com/ccs/esd/documents/users_guide/ccs_installation.html
+https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs/ccs_getting-started.html
+TI MSP430 compiler:
+https://www.ti.com/tool/en-us/download/MSP-CGT
+https://software-dl.ti.com/codegen/esd/cgt_public_sw/MSP430/21.6.2.LTS/README.html
+
+Network APIs checked against installed Arduino-ESP32 core 3.3.12 sources:
+libraries/Network/src/NetworkClient.h/.cpp and NetworkServer.h/.cpp;
+variants/dfrobot_firebeetle2_esp32e/pins_arduino.h and boards.txt.
+The original Booster header map is retained from the supplied project wiring.
+
+Adafruit DHT 1.4.6 vendored under MIT, with documented bounded-time ESP32 patches:
+https://github.com/adafruit/DHT-sensor-library/tree/1.4.6
+S3 ADC GPIO and calibratedmillivolts:
+https://docs.espressif.com/projects/arduino-esp32/en/latest/api/adc.html
+https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html

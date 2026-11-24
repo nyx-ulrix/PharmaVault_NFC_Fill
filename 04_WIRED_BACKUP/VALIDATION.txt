@@ -1,0 +1,130 @@
+PHARMAVAULT REPEAT TIMER TEST - VALIDATION
+Baseline: PharmaVault_Streamlined (before the original timer-demo request)
+Baseline sketch SHA256: 3200665ACA32B890C3FA15CE85793B02A9ED473E0FC132A7F93F7E630808AC2F
+Final sketch SHA256: E314B9E5E841C0975F0B92E1E56045623EFD963581AA3308841AF8E998676188
+
+PHARMAVAULT REPEAT TIMER - HOST VALIDATION
+13 November 2026
+
+Status: PASS
+Actual release sketch:
+outputs/PharmaVault_RepeatTimer/ESP32/PharmaVault_ESP32S3/PharmaVault_ESP32S3.ino
+SHA256: E314B9E5E841C0975F0B92E1E56045623EFD963581AA3308841AF8E998676188
+
+BASELINE
+Harness copied from the original weekly-validation source files. Firmware
+baseline: outputs/PharmaVault_Streamlined. No cancelled TimerDemo, WiFiFix,
+or ConnectionFix code or tests were used for this release validation.
+
+Commands executed:
+  From work/repeat-timer-validation: cmd /c run.cmd
+  python work/repeat-timer-validation/check-release.py
+
+The harness includes and compiles the actual .ino with Microsoft C++17.
+Arduino GPIO, serial, clock, Wi-Fi, HTTP and NVS interfaces are mocked.
+Only compiler warning: existing mock String strncpy deprecation.
+
+EXISTING WEEKLY REGRESSIONS: PASS
+- Initial seven-day pack and empty parking-position confirmation.
+- Seven calendar days keep strict day-specific slots and saved timer.
+- Due time arms; a fresh hand causes durable once-per-day motion.
+- Overdue/late windows, missed-predecessor recovery and day-eight refill.
+- Offline and paused days, restart/rollback, journal migration, corruption.
+- Injected NVS failures before refill, Ready, Attempted and completion.
+- Existing active-LOW IR mode: fixed 1.5-second hold, fresh clear interval,
+  repeatable unloaded tests without real dose/week records, off on reboot.
+- NFC reads weekly status; duplicate cards never rotate or reset the week.
+- Environment UART parsing and invalid sensor sentinel rejection.
+
+NEW REPEAT TIMER REGRESSIONS: PASS
+- Existing POST /test/mode with timed=1; auth, one-use token, confirmation,
+  verified motor and empty/dummy contents checks remain required.
+- No clock or weekly setup needed for the unloaded timer test.
+- WAITING through 9999 ms; READY at 10000 ms without moving the motor.
+- OVERDUE at 30000 ms if not completed, without initiating movement.
+- A hand already present before READY cannot dispense. One second of fresh
+  clear input after READY is needed, then 1500 ms active-LOW input.
+- One late hand cycle remains possible after overdue.
+- Movement crossing the overdue deadline is marked OVERDUE while moving;
+  finishing transitions to COMPLETED. Early completion stays completed.
+- A completed timer test never repeats from a held or re-presented hand.
+- Start/restart resets test count and 10/30-second countdown; idle cooldown
+  required. Start/stop while motion is queued or running is rejected.
+- Thresholds operate across uint32 millis rollover.
+- Stopping leaves the real schedule paused; ordinary IR test still repeats.
+- Entry retains the existing pending READY -> FAULT behavior. NVS failure
+  prevents entry/movement. Saved week, timer and journal do not change during
+  test countdowns/motions/restarts, and the real clock advances naturally.
+- Reboot disables test mode, resets test count, keeps settings and lockouts.
+- Existing Wi-Fi save and daily-time save routes still execute successfully.
+
+SOURCE AND JSON CHECKS: PASS
+- Eleven existing method bodies exactly match pre-demo Streamlined:
+  saveWifi, saveSchedule, setClock, setScheduleMode, refillWeek, begin,
+  startWeb, updateWeek, serviceDaily, updateDeadlines and pollUart.
+- All values in the 20 original weekly/direct-IR JSON responses are deeply
+  equal, ignoring ONLY the four added inactive timer-test fields:
+  timerTestMode, timerTestPhase, timerTestDueIn, timerTestOverdueIn.
+- Thirteen actual timer JSON responses parse and validate phase, integer
+  second countdowns, early/late completion, movement and restart.
+- Every test JSON state has no real schedule enable, daily dose history,
+  weekly pack, or wall-clock setup as a side effect of the unloaded test.
+
+EVIDENCE
+check.cpp, weekly-cases.inc, repeat-timer-cases.inc, check-release.py
+release-run.log
+weekly-states.ndjson (20), repeat-timer-states.ndjson (13)
+dashboard/ contains copies of those response fixtures for UI validation.
+
+LIMITS
+Host compilation/software simulation only. No native ESP32 compiler build,
+upload, live Wi-Fi/browser check, electrical test or physical motor test is
+claimed. Commanded motor completion does not measure pill release/ingestion.
+MSP430 source is unchanged. Frontend validation is recorded separately.
+
+
+Command: node work/check-repeat-timer-dashboard.cjs
+PASS: cold-start setup, no auto mutation, explicit UTC clock sync and Singapore-time rendering.
+PASS: explicit seven-pack refill/parking confirmations, saved timer retention, no mid-week reset, calendar progress, day-7 window and latched offline reminder.
+PASS: same-day schedule validation, exact routes, saved-time gate, enable-without-motion confirmation and paused setup controls.
+PASS: explicit alignment, step count/direction, signed bounded jog commands and fresh movement confirmation.
+PASS: due-time arming without motion, previous-compartment restart alignment and no removed servo controls/dependencies.
+PASS: explicit repeatable IR test mode, unloaded confirmation, no clock/week/alignment prerequisite, exclusive setup controls, MCU-owned repeats, count and preserved daily history, disconnect warning and explicit stop.
+PASS: direct HIGH-clear/LOW-hand display, fixed 1.5s instructions, no IR calibration/timing controls or requests, bounded last-report retention and immediate invalidation.
+PASS: any card shows weekly status without a browser mutation or card/medicine assignments.
+PASS: red overdue alert, persisted history presentation, completion lockout text, connection-loss uncertainty and moving-state controls.
+PASS: accessible four-view navigation, keyboard focus/selection, view persistence, guided read-only action, global refill/test/motion/disconnect notices, guarded pause/stop shortcuts and no token reuse.
+All streamlined dashboard mock DOM checks passed. Browser rendering and physical behavior remain unverified.
+Command: node work/check-repeat-timer-real-ui.cjs
+PASS: 33 actual weekly and timed firmware JSON states render without missing-field failures or mutating requests; no servo data, fixed calendar assignments and weekly refill state, overdue/history, clock, motion and setup gates agree.
+Command: node work/check-repeat-timer-additions.cjs
+PASS: Wi-Fi form, button eligibility, fetch/post helpers and network status unchanged byte-for-byte.
+PASS: explicit timed start, reused token/confirmation guards, 10s ready and 30s test-only overdue display without saved-state edits.
+PASS: motor/cooldown gates, explicit repeat, shared stop, and original direct IR mode request unchanged.
+PASS: disconnected test uncertainty, recovery, and absent/null/malformed optional timer fields cannot break the baseline dashboard or Wi-Fi.
+All repeat-timer UI checks passed using a mock DOM; physical behavior remains unverified.
+
+
+SCOPE AND LIMITS
+Only the ESP32 timed IR test option and its dashboard controls were added.
+The cancelled TimerDemo/WiFiFix/ConnectionFix implementations were not reused.
+MSP430 files, target-built .out/.hex and wiring match Streamlined byte-for-byte.
+No native MSP430 rebuild was needed for this ESP32-only change.
+
+Firmware state-machine tests use the actual assembled .ino compiled with the
+host C++ compiler and mocked hardware. Browser-like DOM tests execute the actual
+embedded JavaScript, including states emitted by that firmware harness.
+These tests do not establish physical motor travel, power stability or RF
+connectivity. No live browser/hardware test or upload is claimed.
+
+The installed ESP32 cross-compiler could not launch (Illegal System DLL
+Relocation), including a --version probe. Native ESP32 target compilation
+therefore remains unverified here; Arduino IDE Verify/upload is required.
+
+No extra large stack buffer was added. Four new small JSON fields reuse the
+existing 600-byte test-status buffer. Baseline sendState still declares 4880
+bytes of local character arrays; actual compiled stack usage was not measured.
+Baseline HTTP handling pauses during motor stepping. Typical 512-step movement
+uses roughly 1.54 seconds at the configured 3ms interval; unusually long saved
+step counts can exceed the original dashboard request timeout. No connection
+rewrite is included in this fresh timer-only implementation.

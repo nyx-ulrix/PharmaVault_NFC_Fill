@@ -1,0 +1,79 @@
+PHARMAVAULT - FINAL INDEPENDENT-STATION WIRING
+17 November 2026
+
+Power OFF every board before changing wires. Use printed GPIO/IO numbers,
+not physical header positions. PBesp=ESP32-S3; ESPmsp=original FireBeetle V1.0.
+
+A. PATIENT PILLBOX - PBesp ESP32-S3
+
+STEPPER (SIGNAL PINS UNCHANGED)
+  ULN2003 IN1 -> PBesp GPIO5.
+  ULN2003 IN2 -> PBesp GPIO6.
+  ULN2003 IN3 -> PBesp GPIO7.
+  ULN2003 IN4 -> PBesp GPIO8.
+  28BYJ-48 motor plug -> ULN2003 white motor socket.
+
+MOTOR POWER - MOVE FROM MSP430 TO PILLBOX
+  Disconnect ULN2003 +/VCC from MSP Booster H2.21/5V.
+  Connect ULN2003 +/VCC -> PBesp's confirmed USB5V/VBUS pin.
+  Connect ULN2003 -/GND -> PBesp GND.
+  Use the existing USB power arrangement at PBesp. Never use3V3 or a GPIO as
+  motor power. A pin marked5V does not guarantee current under load: test the
+  existing USB cable/supply for resets during stepping. Do not disable brownout
+  protection to conceal a power drop. No new supply/component is assumed.
+
+IR HAND SENSOR - UNCHANGED
+  VCC -> PBesp3V3; GND -> PBespGND; OUT -> PBesp GPIO14.
+  Keep the existing3.3V-compatible module and activeLOW operation.
+
+THERMISTOR - MOVE THE WHOLE EXISTING DIVIDER
+  Remove its junction connection from MSP P7.0/A12/H2.28.
+  Remove its supply/ground connections from the MSP430.
+  PBesp3V3 -> existing fixed10k resistor -> junction.
+  Junction -> PBesp GPIO1 (ADC1_CH0).
+  Junction -> existing10k NTC, Beta3950 -> PBespGND.
+  The NTC is the lower leg towardGND; fixed10k is the upper leg toward3V3.
+  BoosterJ2 can remain open but is no longer in this measurement circuit.
+
+DHT11 HUMIDITY MODULE - MOVE ALL THREE CONNECTIONS
+  Disconnect DATA from MSP P1.5/H2.38 -> connect DATA to PBesp GPIO2.
+  Disconnect its old MSP power/GND -> connect VCC/3.3 to PBesp3V3,
+  and moduleGND to PBespGND.
+  Follow your module's labelled DATA/3.3/GND positions. No extra divider is
+  used on DATA. Primary temperature is NTC; DHT temperature is diagnostic.
+
+PBesp GPIO3,4,13,17 remain UNUSED in wireless mode. No UART wire goes to the
+MSP430. No SG90/SG92R/HC-SR04 or old ultrasonic divider is used.
+
+B. HEALTHCARE STATION - MSP430 + ESPmsp FIREBEETLE
+
+LOCAL UART - THESE THREE WIRES STAY WITH THE HEALTHCARE STATION
+  MSP P3.3 / BoosterH2.4 TX -> FireBeetle D11 / GPIO16 RX.
+  FireBeetle D10 / GPIO17 TX -> MSP P3.4 / BoosterH2.3 RX.
+  MSPGND / H2.20 orH2.22 -> FireBeetleGND.
+  UART9600baud8N1,3.3V logic. No level shifter is needed for this local UART.
+  Do NOT use FireBeetle's printed TX/RX pins (GPIO1/3), which serve USB serial.
+  Power MSP430 and FireBeetle through their own USB cables. Do not connect
+  their positive5V/VCC or3V3 rails together.
+
+NFC RC522 - ORIGINAL MSP CONNECTIONS RETAINED
+  VCC -> MSP target3V3; GND -> MSPGND; IRQ left unconnected.
+  MOSI -> P3.0 / H2.15.
+  MISO -> P3.1 / H2.14.
+  SCK -> P3.2 / H2.7.
+  SDA/SS -> P2.3 / H2.12 (SPI chip select, not I2C).
+  RST -> P1.6 / H2.5.
+  LCD -> existing fitted BoosterH3 connection; LEDs/power jumpers unchanged.
+
+C. REMOVE THE OLD BETWEEN-STATION WIRES
+  Remove MSP P3.3 -> S3GPIO4 and S3GPIO17 -> MSP P3.4.
+  After moving motor power and all pillbox sensors locally as above, remove
+  the MSP-to-S3 GND jumper too. Do NOT remove the local MSP-to-FireBeetle GND.
+  There must be no positive power rail, sensor lead or signal jumper between
+  the two stations. Each station's own devices still share its local ground.
+
+All existing parts are retained except the already retired servos/ultrasonic.
+Original FireBeetle V1.0 pinout source:
+https://dfimg.dfrobot.com/nobody/wiki/fd28d987619c16281bdc4f40990e5a1c.PDF
+S3 ADC1/GPIO1 source:
+https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html

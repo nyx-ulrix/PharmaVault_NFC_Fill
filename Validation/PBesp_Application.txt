@@ -1,0 +1,119 @@
+PHARMAVAULT INDEPENDENT WIRELESS - FINAL PBesp VALIDATION
+17 November 2026
+
+Status: PASS
+Actual final sketch:
+01_PBesp_ESP32S3/PharmaVault_PBesp/PharmaVault_PBesp.ino
+SHA256: 28949AE7AF036528146112CA7D794BB271B50A30C57D8BEE335A0736717389E9
+
+ARCHITECTURE TESTED
+PBesp ESP32-S3 owns local NTC/DHT sensors, IR detection, carousel, daily/week
+schedule, dashboard and saved refill instructions. The FireBeetle bridge
+connects the remote healthcare MSP430/NFC/LCD station to this pillbox.
+This report supersedes the earlier initial-wireless topology tests.
+
+APPLICATION HOST BUILD AND REGRESSIONS
+The actual assembled .ino is compiled by Microsoft C++17 with explicit
+PvWirelessSerial and PvPillboxSensors test doubles, plus peripheral mocks.
+All original weekly and timer-test regressions pass, with the old incoming
+ENV acceptance test updated to the new local-sensor authority rule.
+
+- Seven date-specific slots, parking8, once-per-day durable attempts,
+  missed-day/late-dose handling, weekly refill lifecycle and saved timer.
+- Restart, clock rollback, legacy journal migration, storage corruption and
+  injected storage failures retain existing movement lockouts.
+- Direct IR tests and timer10s/30s tests, fresh clear/1.5s hold, overdue,
+  early/late completion, once-per-test lockout, restart and millis rollover.
+- Incoming ENV cannot overwrite local sensor values. Healthcare disconnect
+  and reconnect leave local readings and local sensing operational.
+- DHT sampling defers during motor stepping or a timed LOW hand hold.
+  A completed sample invalidates prior IR observations, preventing an
+  unobserved sampling gap from counting toward continuous hand detection.
+- Provider ENV and BOX frames are staged every5s. Data age16s uses invalid
+  sentinels; disconnect/backpressure cannot replay stale queued sensor data.
+- Timer demonstration broadcasts TEST_OVERDUE at30s and TEST after
+  completion without inserting real overdue/dose journal entries.
+- Instructions enforce auth/token/confirmation, printable ASCII and48
+  characters. All93 permitted ASCII bytes round-trip at48-character length
+  via MED hexadecimal replies inside the128-byte protocol buffer.
+- Commas/semicolons preserve exact text; blank days become Not set.
+- Metadata saves preserve active schedule/week/dose state. Reboot retains
+  text; failed NVS writes preserve the former stored record and fail closed.
+
+SOURCE AND JSON CHECKS
+PASS: 14 original motor/weekly/timer/Wi-Fi method bodies exactly preserved.
+PASS: all33 existing state values preserved except three added metadata fields and explicit local-sensor source wording.
+PASS: seven independent-architecture states validate local readings while remote station is offline, stale values, reconnect and saved instructions.
+PASS: maximum payload parses with seven48-character instructions,8long-label history and8alerts; 4042 /7500 bytes; bundled DHT license present.
+PBesp SHA256: 28949AE7AF036528146112CA7D794BB271B50A30C57D8BEE335A0736717389E9
+
+STATUS MEMORY STRESS
+The shared statusChunk holds at most809 formatted bytes out of2200 across
+the complete regression run. Instrumentation reports zero snprintf failures
+or truncations. Seven48-character instructions plus eight16-character-label
+history records and eight overdue records produce valid4042-byte JSON,
+below the reserved7500-byte capacity. This is source/software evidence;
+actual target task-stack usage and heap behavior were not measured.
+
+REAL-MODULE COMBINED SMOKE BUILD
+The complete actual PBesp sketch also compiles/runs with the actual packaged
+PvWirelessSerial/PvTcpChannel/PvProtocol and PvPillboxSensors class, including
+the real DHT declarations. Only socket/peripheral APIs and DHT transaction
+return values are mocked in this separate smoke. No transport or sensor-class
+test double substitutes those modules in the smoke.
+check.cpp
+C:\Users\honha\Documents\Codex\2026-11-02\can\work\wireless-validation\final\smoke\../Arduino.h(29): warning C4996: 'strncpy': This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+PASS: complete PBesp sketch compiles/runs with real packaged wireless adapter/channel/protocol and real PvPillboxSensors class/DHT declarations.
+PASS: independent local sampling, bad authentication rejection, provider ENV, incoming ENV rejection, NFC WEEK/MED replies, and local readings retained on remote disconnect; no motor energizing.
+LIMIT: socket/peripheral APIs and DHT transaction return values mocked; actual DHT.cpp waveform and transport tests recorded separately.
+
+The actual DHT.cpp waveform timing and TCP/bridge queue/authentication tests
+are covered by their separate sensor/transport validation reports.
+
+DASHBOARD TESTS
+Command: node work/check-wireless-final-instructions.cjs
+PASS: seven48-character instruction fields, exact saved readback, dirty-draft preservation and ASCII/quote/backslash validation (comma/semicolon allowed).
+PASS: explicit authenticated one-use-token POST, empty days allowed, save success/failure/network uncertainty, no auto mutation and motion/storage/offline gates.
+PASS: malformed/missing instruction array affects only new controls; Wi-Fi form/handler/fetch/post and original save eligibility remain unchanged.
+
+Command: node work/check-wireless-final-real-ui.cjs
+PASS: 40 actual weekly, timed and independent-pillbox firmware JSON states render without missing-field failures or mutating requests.
+PASS: all existing controls/weekly history/timer tests agree with firmware; bridge connected/disconnected and dashboard-unreachable UNKNOWN/recovery states display correctly.
+PASS: tested HTML is embedded in the actual S3 release. Mock DOM only; physical browser/radio operation unverified.
+
+The editor keeps drafts during polling and rejected/uncertain saves, accepts
+empty fields and permitted punctuation, and rejects LF/CR/NUL/DEL, Unicode,
+quotes, backslashes and overlong text. Malformed optional metadata affects
+only the new editor controls. Shared Wi-Fi form/handler/fetch/post code remains
+unchanged. Actual HTML tested is embedded in this final sketch.
+
+COMMANDS AND EVIDENCE
+work/wireless-validation/final/run.cmd
+work/wireless-validation/final/smoke/run.cmd
+work/wireless-validation/final/check-release.py
+work/check-wireless-final-instructions.cjs
+work/check-wireless-final-real-ui.cjs
+release-run.log, smoke/release-run.log, ui-results.txt
+weekly-states.ndjson(20), repeat-timer-states.ndjson(13),
+independent-states.ndjson(7), max-status.json
+
+LIMITS
+Host simulation only. Native ESP32 compiler executables still fail to launch
+with Illegal System DLL Relocation, including fresh --version probes of the
+ESP32, ESP32-S3 and generic Xtensa compiler names. No native ESP32 binary,
+upload, real radio connection, browser screenshot, USB power, wiring, physical
+sensor calibration or actual pill release is claimed. Motor command completion
+is not proof of pill delivery or ingestion. MSP430 native/host validation is
+documented separately. DHT license file is present alongside its source.
+
+FINAL PBesp FILE MANIFEST
+91D486A1FE76893DB605BB2F38B10E5E975715EB2A58277286077E19A5644182  ADAFRUIT_DHT_LICENSE.txt
+001CC8A12E0810D0107362E19289D44FD85C0A85949359386B8C49C5EF0B84B9  DHT.cpp
+DD5999B9D3055B2B42F7BF60D4768631EBF4E0BA40A9D334A60A7E6FE7E6EF9D  DHT.h
+28949AE7AF036528146112CA7D794BB271B50A30C57D8BEE335A0736717389E9  PharmaVault_PBesp.ino
+E5FAB34CF94B83CAED39524BF4728FA0938D1B7AF2B39AE180DCAC70D8445B99  PvBridgeCore.h
+B556B73D75CAB0787D8BF7C0C5E11E1934FD6D235FA523ABF35957907A65FCD9  PvPillboxSensors.h
+27D368C9242870BD170C18769C95375E7DD77349EA026C598E55D0A08E6DD6F1  PvProtocol.h
+51DF713BE2384804B898D15D60191E8EBC69F3F098EDC5BD185AD4D65258F641  PvTcpChannel.h
+802B044E94ADA7732D4D3959A26CA5152D57276BDB5674396CCEC17BDFA30FC0  PvWirelessSerial.h
+E9E12A2CC637D296F387479B5876C849FCE6223524564BE8451788082363D1EA  SENSOR_INTEGRATION.txt

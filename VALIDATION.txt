@@ -1,87 +1,38 @@
-PHARMAVAULT NFC + FILL UPDATE 1 - VALIDATION
+PHARMAVAULT INDEPENDENT WIRELESS - RELEASE VALIDATION
+17 November 2026
 
-DELIVERED ESP32 SKETCH SHA256
-4ECD9FE923A6F439EC7453BB3290CD3892D760B0D220C42A195F60825961D2D7
+This release implements the clarified independent-station architecture:
+local sensors/motor/dashboard on PBesp (S3), wireless bridge on ESPmsp
+(FireBeetle), remote monitor/NFC/refill pages on healthcare MSP430.
 
-MSP430 MAIN.C SHA256
-DE451608B47B2B83014951C6218EEFA17319E6B4DA543CAACD237DCCBEE26E07
+PBesp sketch SHA256: 28949AE7AF036528146112CA7D794BB271B50A30C57D8BEE335A0736717389E9
 
-MSP430 RC522.C SHA256
-AB16E3F1D995E0A8C228AFCEB675A16ED940D21B57389AC25A0DFD3C5884B73B
+See Validation/ for detailed evidence from each part:
+- Application: actual PBesp firmware state-machine and dashboard tests.
+- Wireless transport: actual bridge/transport code with mocked sockets/UART/NVS.
+- Sensors: actual vendored DHT pulse decoder and ADC conversion tests.
+- Healthcare MSP: strict incoming protocol/refill paging/freshness tests and
+  native TI MSP430 compiler21.6.2.LTS build of the supplied .out/.hex.
 
-MSP430 PRECOMPILED .OUT SHA256
-B6DF22ED4D62AF4F670B108C19EAF8C71029B21DB958C8B3C51702EF85C1E80D
+The original RepeatTimer wired backup is preserved byte-for-byte, including
+its MSP firmware and original wiring reference. Shared transport headers and
+sensor sources in the sketches match their tested source files. ZIP CRCs,
+archive extraction bytes and the SHA256 manifest are checked when packaging.
 
-NATIVE MSP430 BUILD: PASS
-TI MSP430 C compiler21.6.2.LTS, MSP430F5529, C99, small code/data model.
-main.c, dht11.c and rc522.c compiled and linked without errors/warnings.
-The included Firmware .out/.hex were generated from this updated source.
-Linker reports RAM1494/8192 bytes and mainFLASH15939/48000 bytes allocated;
-interrupt vectors are separately allocated. Physical programming unverified.
+LIMITS
+ESP32 native target compiler probes fail on the authoring PC with Illegal
+System DLL Relocation, so no target-built ESP32 binary is supplied or claimed.
+Arduino IDE Verify/upload is still required on your PC. Host compilation and
+tests do not establish RF range, USB power delivery, actual ADC calibration,
+LCD wiring, physical motor travel or pill release. No hardware upload or
+live radio test was performed by this process.
 
-ESP32 HOST BUILD/BEHAVIOR: PASS
-MSVC C++17 with mocked Arduino/ESP32 peripherals. Existing two-servo,
-UART/environment/NFC mapping, ultrasonic and settings tests retained.
-New tests verify:
-- Complete ordered GPIO3close650ms -> GPIO5position1000ms ->
-  GPIO3open650ms -> GPIO3close650ms sequence, no PWM overlap.
-- No automatic movement on boot or mode enable; mapped/calibrated slot,
-  flap calibration, explicit mode enable and fresh reader state required.
-- Fresh CLEAR/EMPTY after mode enable; held card, repeated TAG, retransmitted
-  CLEAR/EMPTY and log-only requests cannot repeat a cycle.
-- BOOT pauses mode, invalidates reader readiness and resets the retry cache
-  so restarted MSP sequence values can be reused in a new session.
-- UART acknowledged during motion; busy/cooldown requests rejected; stale
-  heartbeat pauses mode; PWM/settings faults prevent further action.
-- Accepted manual movement/calibration/tag edits pause automatic mode.
-- Independent fill1 calibration, no migration of arbitrary old loaded sample
-  to100%; empty/full range and minimum20mm separation, persistence and errors.
-- Expected0/25/50/75/100%, rounding, small endpoint clamp, and unavailable
-  for missing/unstable/stale/moving/out-of-calibrated-band measurements.
+The NTC conversion assumes nominal3.3V supply and the supplied10k/B3950 parts.
+Demo environment limits are20..30C and<=60%RH, not medicine-specific limits.
+The software records step commands, not proof of pill release or ingestion.
+NFC opens the single currently paired pillbox; it is not multi-box UID routing.
 
-MSP READER/QUEUE BEHAVIOR: PASS
-Host fixture extracts real functions from the delivered main.c.
-- Held UID produces one presentation; >=1s clean absence produces CLEAR
-  followed by EMPTY; a fresh retap produces another presentation.
-- RF ambiguity does not declare absence and resets its confirmation timer.
-- Different-card replacement queues CLEAR before TAG; queue overflow drops
-  the new tap and forces a paused resynchronization rather than late action.
-- Unsent TAG expires at500ms, removes its paired LOGREQ, and handles tick
-  wrap; already transmitted retries retain their sequence/decision.
-- Reader disconnection reports BOOT/pause rather than false removal.
-
-RC522 REGISTER SIMULATION: PASS
-Extracts real transceive, rc522_scan and health functions from release.
-Clean hardware-timer no-response is distinguished from collision/error,
-partial FIFO, partial bits, RX+timer, timeout without hardware IRQ, SPI read
-or cleanup failures, SELECT failure and successful UID presentation.
-Only clean WUPA silence establishes absence; failures do not re-arm a held tag.
-
-DASHBOARD AND JSON: PASS
-JavaScript syntax/mock-DOM tests cover existing manual controls, automatic
-mode, fill calibration, percentage rendering, local freshness expiry,
-no-echo/movement/connection loss and no motor requests from page/card refresh.
-Fifteen actual firmware state snapshots parsed strictly as JSON, including
-old range fields plus new NFC/fill fields.
-
-LIMITATIONS
-ESP32 native compilation is not claimed. The local native compiler previously
-failed to start with Windows Illegal System DLL Relocation; use the user's
-working Arduino IDE and ESP32S3 Dev Module settings to compile/upload.
-Software simulations do not verify physical servo motion, timing under real
-load, power quality, carousel alignment, actual RF behavior, or reliable
-ultrasonic reflections from real pills. Browser appearance was not visually
-validated in this run. The prototype has no position/gate feedback sensors.
-Fill is a current-view height estimate, not pill count or medication delivery.
-
-REPRODUCIBLE WORKSPACE EVIDENCE
-work/assemble-nfc-fill.py
-work/build-msp-nfc-fill.py
-work/nfc-fill-ccs-build/build.log
-work/nfc-fill-validation/run.cmd and run.log
-work/nfc-fill-validation/check-state-json.cjs
-work/nfc-fill-validation/check-nfc-fill-json.cjs
-work/check-nfc-fill-dashboard.cjs
-work/check-msp-nfc-reader.py
-work/nfc-msp-reader-validation/run.log
-work/nfc-rc522-validation/run.cmd and run.log
+The PBesp status formatter reuses a global2200-byte buffer; the four original
+large stack formatting arrays have been removed. This reduces stack pressure
+without changing the normal weekly scheduling/actuation rules. Native stack
+usage and real power stability have not been measured.

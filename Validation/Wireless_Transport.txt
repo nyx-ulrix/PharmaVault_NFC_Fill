@@ -1,0 +1,52 @@
+PHARMAVAULT WIRELESS TRANSPORT / FIREBEETLE BRIDGE VALIDATION
+17 November 2026
+Status: PASS (host simulation)
+
+Command: from work/wireless-transport/tests, cmd /c run.cmd
+Compiler: Microsoft C++17, /W4 /EHsc; no warnings in the final run.
+The test includes the ACTUAL PvWirelessSerial.h, PvTcpChannel.h, PvBridgeCore.h
+and ACTUAL PharmaVault_FireBeetle_Bridge.ino. Only Arduino, Wi-Fi/socket,
+UART, time and Preferences hardware/OS interfaces are mocked.
+
+PASS: CRC validation, embedded-NUL rejection, overflow resynchronization and
+      fragmented line framing.
+PASS: wrong/no authentication and protocol frames before authentication rejected.
+PASS: fragmented/coalesced receive, corrupt CRC drop, bounded nonblocking
+      partial writes, heartbeat and clean reconnection.
+PASS: bounded queues and backpressure; three-second frame expiry without replay;
+      partial-send expiry closes the stream instead of splicing frames.
+PASS: eight-second heartbeat expiry and unsigned millis rollover.
+PASS: a TCP frame stalled halfway for three seconds closes the session before
+      its remainder can be treated as a fresh frame; UART partial expiry
+      discards through the next newline and then recovers.
+PASS: actual S3 adapter restricts connections to its AP subnet, rejects a
+      second session, and exposes only whole checksum-validated UART frames.
+PASS: listener bind failure retries after three seconds without a busy loop or
+      restarting an already established listener/session.
+PASS: actual FireBeetle UART pins RX16/D11, TX17/D10 at9600 8N1 and USB115200;
+      SETUP wizard, strict SSID/password format, persistent pairing/reboot,
+      no password echo, offline UART discard, bidirectional protocol roundtrip,
+      CANCEL/FORGET behavior and failed Preferences writes.
+
+API compatibility checked against the installed Arduino-ESP32 core3.3.12:
+- NetworkServer IPv4-bound constructor, begin(), operator bool(), accept().
+- NetworkClient fd(), connected(), setNoDelay(), connect(IP,port,timeoutMs).
+- ESP-IDF/lwIP nonblocking socket send/recv using MSG_DONTWAIT.
+- Existing HardwareSerial and Preferences APIs retained.
+The server does not use NetworkClient::write's potentially blocking retry loop.
+The bridge's connect attempt has an explicit100ms timeout, at most once/2s.
+
+LIMITS
+These are host tests, not native ESP32 target compilation or RF/hardware tests.
+They do not prove USB power, antenna range, radio reconnection timing, actual
+UART wiring, measured motor travel or final physical delivery.
+The protocol is sent through the password-protected local PharmaVault AP,
+with an application handshake using its existing per-device secret. This is
+not an internet/TLS service; port4210 is bound to192.168.4.1 only.
+
+FROZEN SOURCE SHA256
+802B044E94ADA7732D4D3959A26CA5152D57276BDB5674396CCEC17BDFA30FC0  PvWirelessSerial.h
+51DF713BE2384804B898D15D60191E8EBC69F3F098EDC5BD185AD4D65258F641  PvTcpChannel.h
+E5FAB34CF94B83CAED39524BF4728FA0938D1B7AF2B39AE180DCAC70D8445B99  PvBridgeCore.h
+27D368C9242870BD170C18769C95375E7DD77349EA026C598E55D0A08E6DD6F1  PvProtocol.h
+E253EE2C29219810E14248B5B889DD5294F3749BB9EED44C9FE51D05B46F4942  PharmaVault_FireBeetle_Bridge.ino

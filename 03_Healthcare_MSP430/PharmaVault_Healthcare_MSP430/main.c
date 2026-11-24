@@ -1,27 +1,22 @@
-/* PHARMAVAULT MSP430F5529 sensor node for the button-free demo.
- * Toolchain: TI CCS MSP430 C compiler, C99, MSP430X small code/data model.
- * This node reads NTC temperature, DHT11 humidity, and RC522 card UIDs.
- * Timer1_A provides a 10 ms tick and schedules foreground tasks.
- * Timer0_A measures DHT11 response pulses without blocking UART interrupts.
- * ADC12 reads the external NTC divider at P7.0/A12; remove Booster J2.
- * RC522 SPI reports presentations, confirmed removal and reader heartbeat.
- * UCA0 exchanges CRC-checked frames with the ESP32 using interrupt buffers.
- * The LCD and LEDs indicate environment, card, and ESP32 states.
- * LPM0 idles the CPU between timer and UART work.
- * The ESP32 dashboard owns tag assignments, logs, and demo actuation.
- * AI-assisted reference. Team: record verified authors, adaptations and revision.
+/* PHARMAVAULT healthcare station - wireless provider release 1 (2026-11-17).
+ * MSP430F5529 / TI CCS C99. NFC and Booster LCD/LEDs are local to this station.
+ * The FireBeetle ESP32-E bridge connects on UCA0 P3.3 TX/P3.4 RX at9600.
+ * All environmental sensors, IR and the motor are at the separate ESP32-S3 pillbox.
+ * Remote ENV and BOX frames expire after16s; old readings are never shown as live.
+ * Any supported NFC card requests the paired pillbox's weekly/refill instructions.
+ * Seven medicine texts are fetched sequentially and shown in16-character pages.
+ * Timer1_A, UART RX/TX ISRs and LPM0 retain interrupt-driven low-power operation.
+ * No local ADC, DHT input or motor is initialized by this healthcare firmware.
+ * AI-assisted reference. Team: record actual authors and verified adaptations.
  */
 #include <msp430.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "PvProtocol.h"
-#include "dht11.h"
 #include "rc522.h"
-#include "ThermistorConfig.h"
 
 #define LCD_RS BIT4                    /* H3 control lines on P6. */
 #define LCD_RW BIT5
@@ -31,22 +26,19 @@
 #define RX_CAPACITY 256U               /* Eight-bit ring indices wrap naturally. */
 #define COMMAND_CAPACITY 8U
 #define NFC_PERIOD 12UL                /* About 120 ms, in Timer1_A ticks. */
-#define DHT_PERIOD 500UL               /* About 5 seconds. */
-#define ENV_PERIOD 500UL
 #define ACK_TIMEOUT 70UL              /* About 700 ms including frame time. */
 #define CARD_REMOVE_TICKS 100UL       /* Require about one second of absence. */
 #define READER_HEARTBEAT 500UL        /* Reader presence status about every 5s. */
-#define TAG_QUEUE_MAX_AGE 50UL        /* Never start sending a tap >500ms old. */
+#define TAG_QUEUE_MAX_AGE 50UL        /* Expire an old unsent lookup instead of showing it late. */
+#define REFILL_HOLD_TICKS 6000UL     /* Maximum whole-list view; individual pages use250 ticks. */
+#define REMOTE_FRESH_TICKS 1600UL    /* About16 seconds without new remote data. */
+#define REFILL_PAGE_TICKS 250UL      /* About2.5 seconds per16-character page. */
 #define ADC_TEMP_INVALID (-32768L)
 #define DHT_HUMIDITY_INVALID 65535U
 
-/* Demonstration thresholds. Set both nodes to match the agreed storage limits. */
-#define TEMP_MIN_X100 2000L
-#define TEMP_MAX_X100 3000L
-#define RH_MAX_X100 6000U
 #define DEBUG_UART 1                   /* eZ-FET backchannel at 9600 baud. */
 
-typedef enum { CMD_ENV, CMD_TAG, CMD_LOGREQ, CMD_CLEAR, CMD_READER } CommandKind;
+typedef enum { CMD_ENV, CMD_TAG, CMD_LOGREQ, CMD_CLEAR, CMD_READER, CMD_MED } CommandKind;
 typedef struct {
     CommandKind kind;
     uint16_t seq;
@@ -55,8 +47,6 @@ typedef struct {
 } Command;
 
 static volatile uint32_t ticks;
-static volatile bool adc_ready;
-static volatile uint16_t adc_raw;
 static volatile uint8_t rx_head, rx_tail;
 static volatile bool rx_fault;
 static uint8_t rx_ring[RX_CAPACITY];
@@ -69,15 +59,26 @@ static uint16_t next_sequence;
 static uint32_t sent_tick;
 static bool waiting_ack;
 
-static bool reader_online, temperature_sampled, humidity_sampled;
+static bool reader_online;
 static int32_t temperature_x100 = ADC_TEMP_INVALID;
 static uint16_t humidity_x100 = DHT_HUMIDITY_INVALID;
-static uint8_t flags, reported_flags = 0xff;
-static uint32_t next_nfc, next_dht = 120, next_environment, lcd_hold_until;
-static uint32_t led_until, temperature_tick, humidity_tick;
+static uint8_t flags = 4, remote_warning_mask;
+static uint32_t next_nfc, lcd_hold_until;
+static uint32_t led_until;
 static char held_uid[21];
 static bool absence_pending, absence_confirmed, reader_resync_pending;
 static uint32_t absence_started, next_reader_heartbeat;
+static bool refill_view_active;
+static uint32_t refill_hold_until;
+static bool remote_environment_seen, remote_box_seen;
+static uint32_t remote_environment_tick, remote_box_tick;
+static uint8_t box_day;
+static char box_state[16] = "SETUP";
+static bool box_overdue, box_refill;
+static char refill_text[7][49];
+static bool refill_fetch_active, refill_request_pending;
+static uint8_t refill_next_day, refill_page_day, refill_page_chunk;
+static bool idle_status_page;
 
 /* Configure nominal MCLK 4.194304 MHz, SMCLK 1.048576 MHz, ACLK 32.768 kHz. */
 static void clocks_init(void)
@@ -215,19 +216,7 @@ static void debug_write(const char *text)
 #endif
 }
 
-/* ADC12 A12 reads the external NTC divider. J2 MUST be open: VR2 isolated. */
-static void adc_init(void)
-{
-    P7SEL |= BIT0;
-    ADC12CTL0 = ADC12ON | ADC12SHT0_8;
-    ADC12CTL1 = ADC12SHP;
-    ADC12CTL2 = ADC12RES_2;
-    ADC12MCTL0 = ADC12INCH_12 | ADC12SREF_0;
-    ADC12IE = BIT0;
-    ADC12CTL0 |= ADC12ENC | ADC12SC;
-}
-
-/* Timer function 1: task tick and thermistor ADC conversion scheduling. */
+/* Timer1 task tick drives foreground work and low-power wakeups. */
 static void scheduler_init(void)
 {
     TA1CCR0 = 327;                    /* 328 / 32768 Hz = 10.0098 ms. */
@@ -267,7 +256,108 @@ static void finish_command(void)
     waiting_ack = false;
 }
 
-/* A tag waiting behind an unavailable link must not actuate later on recovery.
+/* Drop only MED lookups, preserving other queued reader/card commands.
+ * TX ISR owns its independent byte frame; an already-started old request may
+ * finish transmitting, but its reply is ignored after this context is cleared. */
+static void cancel_refill_lookup(void)
+{
+    uint8_t input, kept = 0;
+    const uint8_t original = command_count;
+    const bool removed_head = original && commands[command_head].kind == CMD_MED;
+    for (input = 0; input < original; ++input) {
+        const uint8_t from = (command_head + input) % COMMAND_CAPACITY;
+        const uint8_t to = (command_head + kept) % COMMAND_CAPACITY;
+        if (commands[from].kind == CMD_MED) continue;
+        if (from != to) commands[to] = commands[from];
+        ++kept;
+    }
+    command_count = kept;
+    if (removed_head) { waiting_ack = false; attempts = 0; }
+    refill_fetch_active = refill_request_pending = refill_view_active = false;
+    refill_next_day = refill_page_day = refill_page_chunk = 0;
+    memset(refill_text, 0, sizeof refill_text);
+}
+
+static void start_refill_lookup(void)
+{
+    cancel_refill_lookup();
+    refill_fetch_active = true;
+    refill_next_day = 1;
+}
+
+static void service_refill(uint32_t now)
+{
+    char day[3], second[17];
+    (void)now;
+    if (!refill_fetch_active || refill_request_pending) return;
+    if (refill_next_day < 1 || refill_next_day > 7) { cancel_refill_lookup(); return; }
+    snprintf(day, sizeof day, "%u", refill_next_day);
+    if (!enqueue(CMD_MED, day)) return;
+    refill_request_pending = true;
+    snprintf(second, sizeof second, "Day %u of 7", refill_next_day);
+    display("Reading refill", second, 100);
+}
+
+static bool box_state_valid(const char *text)
+{
+    static const char *const states[] = {
+        "CLOCK", "SETUP", "TEST", "TEST_OVERDUE", "PAUSED", "NOT_DUE", "READY",
+        "ATTEMPTED", "COMPLETED", "MISSED", "FAULT", "POSITIONING"
+    };
+    unsigned i;
+    for (i = 0; i < sizeof states / sizeof states[0]; ++i)
+        if (!strcmp(text, states[i])) return true;
+    return false;
+}
+
+static bool environment_fresh(uint32_t now)
+{
+    return remote_environment_seen && !due(now, remote_environment_tick + REMOTE_FRESH_TICKS);
+}
+
+static bool box_fresh(uint32_t now)
+{
+    return remote_box_seen && !due(now, remote_box_tick + REMOTE_FRESH_TICKS);
+}
+
+/* Remote sensor values are accepted only with range/sentinel/flags consistency. */
+static void receive_environment(char **fields)
+{
+    int32_t t, rh;
+    uint16_t f;
+    bool tv, hv;
+    char debug_line[80];
+    if (!pv_i32(fields[3], &t) || !pv_i32(fields[4], &rh) || !pv_u16(fields[5], &f) || f > 7) return;
+    tv = t >= -4000L && t <= 12500L;
+    hv = rh >= 0 && rh <= 10000;
+    if ((!tv && t != ADC_TEMP_INVALID) || (!hv && rh != DHT_HUMIDITY_INVALID) || ((!tv || !hv) && !(f & 4))) return;
+    temperature_x100 = t;
+    humidity_x100 = (uint16_t)rh;
+    flags = (uint8_t)f;
+    remote_environment_tick = tick_now();
+    remote_environment_seen = true;
+    snprintf(debug_line, sizeof debug_line, "PB_ENV temp_x100=%ld,rh_x100=%u,flags=%u\r\n", (long)t, humidity_x100, flags);
+    debug_write(debug_line);
+}
+
+static void receive_box(char **fields)
+{
+    uint16_t day, overdue, refill;
+    char debug_line[72];
+    if (!pv_u16(fields[3], &day) || day > 7 || !box_state_valid(fields[4]) ||
+        !pv_u16(fields[5], &overdue) || overdue > 1 || !pv_u16(fields[6], &refill) || refill > 1) return;
+    box_day = (uint8_t)day;
+    strcpy(box_state, fields[4]);
+    box_overdue = overdue != 0;
+    box_refill = refill != 0;
+    remote_box_tick = tick_now();
+    remote_box_seen = true;
+    snprintf(debug_line, sizeof debug_line, "PB_BOX day=%u,state=%s,overdue=%u,refill=%u\r\n", day, box_state, overdue, refill);
+    debug_write(debug_line);
+}
+
+
+/* A card lookup waiting behind an unavailable link must not appear much later.
  * Retries of an already sent TAG keep their sequence and use ESP replay handling.
  */
 static bool expire_queued_tag(uint32_t now)
@@ -288,7 +378,7 @@ static bool expire_queued_tag(uint32_t now)
 /* Encode and queue bytes to the TX ISR. Retries keep the original sequence. */
 static void service_transmit(uint32_t now)
 {
-    static const char *const names[] = {"ENV", "TAG", "LOGREQ", "CLEAR", "READER"};
+    static const char *const names[] = {"ENV", "TAG", "LOGREQ", "CLEAR", "READER", "MED"};
     const Command *command;
     char body[PV_FRAME_SIZE];
     size_t length;
@@ -298,6 +388,12 @@ static void service_transmit(uint32_t now)
     if (waiting_ack && !due(now, sent_tick + ACK_TIMEOUT)) return;
     command = &commands[command_head];
     if (attempts >= 3) {
+        if (command->kind == CMD_MED) {
+            cancel_refill_lookup();
+            display("Refill link error", "Remove and retap", 300);
+            indicate(false);
+            return;
+        }
         display("ESP32 link error", "No reply", 250);
         indicate(false);
         finish_command();
@@ -325,6 +421,11 @@ static void display_ui(const char *state, int32_t slot)
     static char previous[24];
     static int32_t previous_slot = -2;
     char second[17];
+    /* Card information must survive routine ESP status traffic for about 8 seconds.
+     * Fault messages and local sensor warnings may interrupt this informational view. */
+    if ((refill_fetch_active || (refill_view_active && !due(tick_now(), refill_hold_until))) && !strstr(state, "FAULT")) return;
+    if (strstr(state, "FAULT")) cancel_refill_lookup();
+    refill_view_active = false;
     /* Keep stable status packets from hiding the idle environment view. */
     if (slot == previous_slot && !strcmp(state, previous)) return;
     snprintf(previous, sizeof previous, "%.23s", state);
@@ -332,39 +433,53 @@ static void display_ui(const char *state, int32_t slot)
     if (slot >= 0) snprintf(second, sizeof second, "Compartment %ld", (long)slot + 1);
     else strcpy(second, "Device status");
 
-    if (!strcmp(state, "CALIBRATE")) {
-        display("Servo unarmed", "See dashboard", 250);
-    } else if (!strcmp(state, "DEMO_READY")) {
-        display("Demo ready", "See dashboard", 180);
-    } else if (!strcmp(state, "DEMO_MOVING")) {
-        display("Moving demo flap", second, 300);
-    } else if (!strcmp(state, "DEMO_PULSE_SENT")) {
-        display("Servo cmd sent", second, 300);
-    } else if (!strcmp(state, "DEMO_SERVO_FAULT")) {
-        display("Servo fault", "Inspect flap", 400);
-    } else if (!strcmp(state, "NFC_CLOSING") || !strcmp(state, "NFC_CLOSING_END")) {
-        display("Closing flap", second, 300);
-    } else if (!strcmp(state, "NFC_POSITION")) {
-        display("Positioning", second, 300);
-    } else if (!strcmp(state, "NFC_OPENING")) {
-        display("Opening flap", second, 300);
+    if (!strcmp(state, "DOSE_READY")) {
+        display("Dose ready", second, 180);
+    } else if (!strcmp(state, "DOSE_MOVING")) {
+        display("Dispensing steps", second, 300);
+    } else if (!strcmp(state, "DOSE_STEPS_DONE")) {
+        display("Steps completed", second, 300);
+    } else if (!strcmp(state, "MOTOR_FAULT")) {
+        display("Motor fault", "Inspect carousel", 400);
     } else {
         display(state, second, 250);
     }
+}
+
+/* Decode up to48 printable medicine-instruction characters from uppercase hex. */
+static bool decode_refill_label(const char *hex, char out[49])
+{
+    const size_t length = strlen(hex);
+    size_t i;
+    bool visible = false;
+    if (!length || length > 96U || (length & 1U)) return false;
+    for (i = 0; i < length; i += 2U) {
+        const int hi = pv_hex(hex[i]), lo = pv_hex(hex[i + 1U]);
+        unsigned value;
+        if (hi < 0 || lo < 0) return false;
+        value = ((unsigned)hi << 4) | (unsigned)lo;
+        if (value < 32U || value > 126U || value == '"' || value == '\\') return false;
+        out[i / 2U] = (char)value;
+        if (value != ' ') visible = true;
+    }
+    out[length / 2U] = '\0';
+    return visible;
 }
 
 /* Handle one validated inbound frame from the ESP32. */
 static void receive_frame(char *line)
 {
     char *fields[8];
-    size_t count = pv_split(line, fields, 8);
+    const size_t count = pv_split(line, fields, 8);
     uint16_t seq;
     int32_t slot;
     const Command *command;
     if (count < 3 || !pv_u16(fields[1], &seq)) return;
-    if (seq == 0 && count == 5 && !strcmp(fields[2], "UI") &&
-        pv_i32(fields[4], &slot) && slot >= -1 && slot < 8) {
-        display_ui(fields[3], slot);
+    if (seq == 0) {
+        if (count == 6 && !strcmp(fields[2], "ENV")) receive_environment(fields);
+        else if (count == 7 && !strcmp(fields[2], "BOX")) receive_box(fields);
+        else if (count == 5 && !strcmp(fields[2], "UI") && pv_i32(fields[4], &slot) && slot >= -1 && slot < 8)
+            display_ui(fields[3], slot);
         return;
     }
     if (!command_count || !waiting_ack || seq != commands[command_head].seq) return;
@@ -372,24 +487,58 @@ static void receive_frame(char *line)
     if (count == 5 && !strcmp(fields[2], "ACK")) {
         const bool ok = !strcmp(fields[3], "OK");
         if (!ok && strcmp(fields[3], "ERR")) return;
-        if (command->kind != CMD_ENV && command->kind != CMD_READER && command->kind != CMD_CLEAR) {
-            const char *title = "Request accepted";
-            if (!ok) title = "Request rejected";
-            else if (command->kind == CMD_TAG) title = "Card recognized";
-            display(title, fields[4], 260);
+        if (command->kind == CMD_MED) {
+            cancel_refill_lookup();
+            display("Refill unavailable", "Remove and retap", 300);
+            indicate(false);
+            return;
+        }
+        if (command->kind == CMD_TAG) {
+            display(ok ? "Card recognized" : "Request rejected", fields[4], 260);
             indicate(ok);
         }
         finish_command();
-    } else if (count == 6 && command->kind == CMD_LOGREQ && !strcmp(fields[2], "LOG") &&
-               pv_i32(fields[3], &slot) && slot >= -1 && slot < 8) {
-        char first[17];
-        if (slot >= 0) snprintf(first, sizeof first, "Slot %ld log", (long)slot + 1);
-        else strcpy(first, "Device log");
-        const char *status = fields[4];
-        if (!strcmp(status, "DEMO_PULSE_SENT")) status = "Servo cmd sent";
-        if (!strcmp(status, "DEMO_SERVO_FAULT")) status = "Servo fault";
-        display(first, status, 260);
+        return;
+    }
+    if (count == 5 && command->kind == CMD_TAG && !strcmp(fields[2], "WEEK") &&
+        pv_i32(fields[3], &slot) && slot >= 0 && slot <= 7) {
+        char first[17], second[17], debug_line[48];
+        if (!strcmp(fields[4], "REFILL")) { strcpy(first, "Refill all 7days"); strcpy(second, "Reading list"); }
+        else if (!strcmp(fields[4], "ACTIVE")) {
+            if (!slot) strcpy(first, "Week starts soon");
+            else snprintf(first, sizeof first, "Week day %ld of 7", (long)slot);
+            strcpy(second, "Reading list");
+        } else if (!strcmp(fields[4], "SETUP")) { strcpy(first, "Load 7 days"); strcpy(second, "Reading list"); }
+        else if (!strcmp(fields[4], "CLOCK")) { strcpy(first, "Set clock in web"); strcpy(second, "Reading list"); }
+        else return;
+        display(first, second, 200);
+        indicate(true);
+        snprintf(debug_line, sizeof debug_line, "Week day %ld: %s\r\n", (long)slot, fields[4]);
+        debug_write(debug_line);
         finish_command();
+        start_refill_lookup();
+        return;
+    }
+    if (count == 5 && command->kind == CMD_MED && !strcmp(fields[2], "MED") &&
+        refill_fetch_active && refill_request_pending && pv_i32(fields[3], &slot) && slot >= 1 && slot <= 7) {
+        uint16_t requested;
+        char decoded[49], debug_line[72];
+        if (!pv_u16(command->arguments, &requested) || requested != (uint16_t)slot || requested != refill_next_day ||
+            !decode_refill_label(fields[4], decoded)) return;
+        strcpy(refill_text[slot - 1], decoded);
+        snprintf(debug_line, sizeof debug_line, "Refill day %ld: %s\r\n", (long)slot, decoded);
+        debug_write(debug_line);
+        finish_command();
+        refill_request_pending = false;
+        if (slot < 7) ++refill_next_day;
+        else {
+            refill_fetch_active = false;
+            refill_view_active = true;
+            refill_page_day = refill_page_chunk = 0;
+            refill_hold_until = tick_now() + REFILL_HOLD_TICKS;
+            lcd_hold_until = tick_now();
+            indicate(true);
+        }
     }
 }
 
@@ -432,10 +581,10 @@ static void report_card(const uint8_t *uid, uint8_t length)
     text[2U * length] = '\0';
     if (!strcmp(held_uid, text)) return;
     debug_write("UID "); debug_write(text); debug_write("\r\n");
-    /* Never defer a tap after queue overflow. Force the ESP32 back to paused
-     * mode and require a new removal/presentation after the operator enables it.
-     * If one card replaces another, CLEAR is queued before the new TAG. */
-    if (reader_resync_pending || command_count > COMMAND_CAPACITY - (held_uid[0] ? 3U : 2U)) {
+    cancel_refill_lookup(); /* A newly presented card invalidates the old refill cache and requests. */
+    /* Do not defer lookup after queue overflow. Resynchronize and require a new tap.
+     * A replacement card sends CLEAR before TAG; no LOGREQ may overwrite its name. */
+    if (reader_resync_pending || command_count > COMMAND_CAPACITY - (held_uid[0] ? 2U : 1U)) {
         strcpy(held_uid, text);
         reader_resync_pending = true;
         display("Link busy", "Remove and retap", 250);
@@ -444,8 +593,7 @@ static void report_card(const uint8_t *uid, uint8_t length)
     }
     if (held_uid[0]) enqueue(CMD_CLEAR, held_uid);
     strcpy(held_uid, text);
-    enqueue(CMD_TAG, text);
-    enqueue(CMD_LOGREQ, text);
+    enqueue(CMD_TAG, text);       /* WEEK reply starts sequential MED1..7 lookups. */
     if (length <= 7) display("Reading card UID", text, 180);
     else {
         char first[17];
@@ -485,6 +633,7 @@ static void service_reader(uint32_t now)
             reader_resync_pending = true;
             absence_pending = absence_confirmed = false;
             if (enqueue(CMD_READER, "BOOT")) reader_resync_pending = false;
+            cancel_refill_lookup();
             display("Reader offline", "Check RFID wiring", 250);
             return;
         }
@@ -510,93 +659,42 @@ static void service_reader(uint32_t now)
     }
 }
 
-/* Zero, negative, NaN and infinite component settings are never usable. */
-static bool thermistor_configured(void)
+/* Both data streams have independent freshness; cached values are never live
+ * merely because a card request was acknowledged. New warnings interrupt a
+ * refill view once; a steady warning does not continually hide its pages. */
+static void service_remote(uint32_t now)
 {
-    return isfinite(NTC_FIXED_RESISTOR_OHMS) && NTC_FIXED_RESISTOR_OHMS > 0.0f &&
-           isfinite(NTC_R25_OHMS) && NTC_R25_OHMS > 0.0f &&
-           isfinite(NTC_BETA_K) && NTC_BETA_K > 0.0f;
-}
-
-/* NTC is the divider's LOWER leg. ADC reference and divider use target 3.3 V.
- * Rntc = Rfixed * ADC / (4095 - ADC). R25 is specified at 298.15 kelvin.
- * Reject near-rail open/short readings and temperatures outside -40..125 C.
- */
-static int32_t thermistor_centi(uint16_t raw)
-{
-    float ratio, inverse_kelvin, celsius, scaled;
-    const float beta = NTC_BETA_K;
-    if (!thermistor_configured() || raw < 5U || raw > 4090U) return ADC_TEMP_INVALID;
-    ratio = (NTC_FIXED_RESISTOR_OHMS / NTC_R25_OHMS) *
-            ((float)raw / (4095.0f - (float)raw));
-    if (!isfinite(ratio) || ratio <= 0.0f) return ADC_TEMP_INVALID;
-    inverse_kelvin = 1.0f / 298.15f + logf(ratio) / beta;
-    if (!isfinite(inverse_kelvin) || inverse_kelvin <= 0.0f) return ADC_TEMP_INVALID;
-    celsius = 1.0f / inverse_kelvin - 273.15f;
-    if (!(celsius >= -40.0f && celsius <= 125.0f)) return ADC_TEMP_INVALID;
-    scaled = celsius * 100.0f;
-    return (int32_t)(scaled + (scaled >= 0.0f ? 0.5f : -0.5f));
-}
-
-/* Update NTC temperature and independent DHT11 humidity; queue current ENV. */
-static void service_environment(uint32_t now)
-{
-    int32_t dht_temperature_x100 = ADC_TEMP_INVALID;
-    Dht11Result result = dht11_take(&dht_temperature_x100, &humidity_x100);
-    if (adc_ready) {
-        char line[48];
-        uint16_t raw;
-        __disable_interrupt();
-        raw = adc_raw;
-        adc_ready = false;
-        __enable_interrupt();
-        temperature_x100 = thermistor_centi(raw);
-        temperature_sampled = true;
-        temperature_tick = now;
-        snprintf(line, sizeof line, "NTC_ADC=%u,temp_x100=%ld\r\n", raw,
-                 (long)temperature_x100);
-        debug_write(line);
-    }
-    if (result != DHT11_PENDING) {
-        char line[64];
-        if (result == DHT11_FAILED) {
-            humidity_x100 = DHT_HUMIDITY_INVALID;
-        }
-        humidity_sampled = true;
-        humidity_tick = now;
-        snprintf(line, sizeof line, "DHT diagnostic_temp_x100=%ld,rh_x100=%u\r\n",
-                 (long)dht_temperature_x100, humidity_x100);
-        debug_write(line);
-    }
-    if (due(now, next_dht) && dht11_start()) next_dht = now + DHT_PERIOD;
-    if (temperature_sampled && due(now, temperature_tick + 300UL))
+    uint8_t warnings = 0;
+    const bool env_fresh = environment_fresh(now);
+    const bool status_fresh = box_fresh(now);
+    if (!env_fresh) {
         temperature_x100 = ADC_TEMP_INVALID;
-    if (humidity_sampled && due(now, humidity_tick + 1200UL)) {
         humidity_x100 = DHT_HUMIDITY_INVALID;
+        flags = 4;
     }
-
-    flags = 0;
-    if (temperature_x100 == ADC_TEMP_INVALID || humidity_x100 == DHT_HUMIDITY_INVALID) flags |= 4;
-    if (temperature_x100 != ADC_TEMP_INVALID &&
-        (temperature_x100 < TEMP_MIN_X100 || temperature_x100 > TEMP_MAX_X100)) flags |= 1;
-    if (humidity_x100 != DHT_HUMIDITY_INVALID && humidity_x100 > RH_MAX_X100) flags |= 2;
-
-    if (temperature_sampled && humidity_sampled &&
-        (flags != reported_flags || due(now, next_environment))) {
-        char arguments[32];
-        snprintf(arguments, sizeof arguments, "%ld,%u,%u", (long)temperature_x100,
-                 humidity_x100, (unsigned)flags);
-        if (enqueue(CMD_ENV, arguments)) {
-            if (flags && flags != reported_flags) {
-                if (!thermistor_configured()) display("Set NTC config", "See config file", 300);
-                else display("Storage warning", (flags & 4) ? "Check sensors" : "Check T / RH", 300);
-                indicate(false);
-            }
-            reported_flags = flags;
-            next_environment = now + ENV_PERIOD;
-        }
+    if ((!env_fresh && (remote_environment_seen || now >= REMOTE_FRESH_TICKS)) ||
+        (!status_fresh && (remote_box_seen || now >= REMOTE_FRESH_TICKS))) warnings |= 8;
+    if (env_fresh) warnings |= flags;
+    if (status_fresh && box_overdue) warnings |= 16;
+    if (status_fresh && box_refill) warnings |= 32;
+    if (status_fresh && (!strcmp(box_state, "FAULT") || !strcmp(box_state, "ATTEMPTED"))) warnings |= 64;
+    if (status_fresh && !strcmp(box_state, "TEST_OVERDUE")) warnings |= 128;
+    if ((warnings & (uint8_t)~remote_warning_mask) != 0) {
+        cancel_refill_lookup();
+        if (warnings & 8) display("PB data offline", "Check wireless", 300);
+        else if (warnings & 4) display("PB sensor fault", "Check sensors", 300);
+        else if (warnings & 3) display("Storage warning", "Check PB T / RH", 300);
+        else if (warnings & 64) display("PB action fault", "Inspect pillbox", 300);
+        else if (warnings & 128) display("TEST overdue", "Check dashboard", 300);
+        else if (warnings & 16) display("Missed/overdue", "Check dashboard", 300);
+        else display("Refill all 7days", "Tap card for list", 300);
+        indicate(false);
     }
+    if ((remote_warning_mask & 128) && !(warnings & 128)) lcd_hold_until = now;
+    remote_warning_mask = warnings;
+    if ((warnings & 8) && (refill_fetch_active || refill_view_active)) cancel_refill_lookup();
 }
+
 
 /* Restore the idle environment view after transient prompts expire. */
 static void service_lcd(uint32_t now)
@@ -606,9 +704,46 @@ static void service_lcd(uint32_t now)
         P8OUT &= ~(LED_OK | LED_WARN);
         led_until = 0;
     }
+    if (remote_warning_mask) P8OUT |= LED_WARN;
+    else if (!led_until) P8OUT &= ~LED_WARN;
     if (!due(now, lcd_hold_until)) return;
-    if (!thermistor_configured()) strcpy(first, "Set NTC config");
-    else if (temperature_x100 == ADC_TEMP_INVALID) strcpy(first, "Temp unavailable");
+    if (refill_fetch_active) {
+        snprintf(second, sizeof second, "Day %u of 7", refill_next_day);
+        display("Reading refill", second, 100);
+        return;
+    }
+    if (refill_view_active && !due(now, refill_hold_until) && refill_page_day < 7) {
+        const size_t length = strlen(refill_text[refill_page_day]);
+        const uint8_t pages = (uint8_t)((length + 15U) / 16U);
+        snprintf(first, sizeof first, "Day %u refill", (unsigned)refill_page_day + 1U);
+        snprintf(second, sizeof second, "%.16s", refill_text[refill_page_day] + (unsigned)refill_page_chunk * 16U);
+        display(first, second, REFILL_PAGE_TICKS);
+        if (++refill_page_chunk >= pages) {
+            refill_page_chunk = 0;
+            ++refill_page_day; /* Keep the last page protected for its full hold. */
+        }
+        return;
+    }
+    refill_view_active = false;
+    idle_status_page = !idle_status_page;
+    if (idle_status_page) {
+        if (!box_fresh(now)) display("PB status stale", "Check wireless", 200);
+        else if (!strcmp(box_state, "TEST_OVERDUE")) display("TEST overdue", "Check dashboard", 200);
+        else if (!strcmp(box_state, "TEST")) display("Test mode active", "No daily count", 200);
+        else if (box_refill) display("Refill all 7days", box_overdue ? "Overdue: see web" : "Tap card for list", 200);
+        else if (box_overdue) display("Missed/overdue", "Check dashboard", 200);
+        else if (!strcmp(box_state, "FAULT") || !strcmp(box_state, "ATTEMPTED")) display("PB action fault", "Inspect pillbox", 200);
+        else {
+            snprintf(first, sizeof first, "Pillbox day %u/7", box_day);
+            display(first, box_state, 200);
+        }
+        return;
+    }
+    if (!environment_fresh(now)) {
+        display("PB T/RH stale", "Check wireless", 200);
+        return;
+    }
+    if (temperature_x100 == ADC_TEMP_INVALID) strcpy(first, "Temp unavailable");
     else {
         const long magnitude = temperature_x100 < 0 ? -temperature_x100 : temperature_x100;
         snprintf(first, sizeof first, "T %s%ld.%ld C %s", temperature_x100 < 0 ? "-" : "",
@@ -617,30 +752,14 @@ static void service_lcd(uint32_t now)
     if (humidity_x100 == DHT_HUMIDITY_INVALID) strcpy(second, "RH unavailable");
     else snprintf(second, sizeof second, "RH %u.%u%% %s", humidity_x100 / 100U,
                   humidity_x100 % 100U / 10U, flags & 2 ? "!" : "");
-    display(first, second, 100);
+    display(first, second, 200);
 }
 
-/* Timer1 CCR0 ISR: update time and sample NTC at approximately 1 Hz. */
+/* Timer1 ISR: wake foreground jobs without local ADC or DHT sampling. */
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void scheduler_isr(void)
 {
-    static uint8_t adc_divider;
     ++ticks;
-    if (++adc_divider == 100) {
-        adc_divider = 0;
-        if (!(ADC12CTL1 & ADC12BUSY)) ADC12CTL0 |= ADC12SC;
-    }
-    __bic_SR_register_on_exit(LPM0_bits);
-}
-
-/* ADC12 ISR: record the NTC divider sample; conversion stays in foreground. */
-#pragma vector=ADC12_VECTOR
-__interrupt void adc_isr(void)
-{
-    if (ADC12IV == ADC12IV_ADC12IFG0) {
-        adc_raw = ADC12MEM0;
-        adc_ready = true;
-    }
     __bic_SR_register_on_exit(LPM0_bits);
 }
 
@@ -675,28 +794,27 @@ int main(void)
     P8OUT &= ~(LED_OK | LED_WARN);
     lcd_init();
     uart_init();
-    dht11_init();
     scheduler_init();
-    adc_init();
     __enable_interrupt();
     reader_online = rc522_init();
     next_nfc = tick_now() + (reader_online ? NFC_PERIOD : 500UL);
     /* Seed the sequence from the running timer to reduce reset collisions. */
-    next_sequence = TA0R;
+    next_sequence = TA1R;
     enqueue(CMD_READER, "BOOT");
     next_reader_heartbeat = tick_now();
     display("PHARMAVAULT", reader_online ? "Tap a card" : "Check RFID wiring", 200);
-    debug_write("PHARMAVAULT MSP430 ready (NFC sequence 1; UART fix 1)\r\n");
+    debug_write("PHARMAVAULT healthcare MSP430 ready (wireless provider 1)\r\n");
     for (;;) {
         uint32_t now = tick_now();
         service_receive();
-        service_environment(now);
+        service_remote(now);
         service_reader(now);
+        service_refill(now);
         service_transmit(tick_now());
         service_lcd(now);
         __disable_interrupt();
-        if (rx_head == rx_tail && !adc_ready && ticks == now) {
-            __bis_SR_register(LPM0_bits | GIE);   /* Keep UART/capture SMCLK. */
+        if (rx_head == rx_tail && ticks == now) {
+            __bis_SR_register(LPM0_bits | GIE);   /* Keep UART SMCLK available. */
         } else {
             __enable_interrupt();
         }

@@ -1,0 +1,94 @@
+PHARMAVAULT - SEVEN-DAY PACK
+Weekly firmware 1 - 13 November 2026
+
+WHAT CHANGED
+Set the daily and overdue times once. They remain saved until you edit them.
+There is no daily medicine-name entry, NFC tap or next-compartment refill.
+Compartments 1-7 hold seven DIFFERENT, date-specific daily doses.
+Compartment 8 stays empty and is the starting/parking position.
+At the daily time, today's assigned compartment becomes available. The motor
+does not move until the IR sensor sees a fresh hand for 1.5 seconds.
+One scheduled attempt per calendar date; an uncertain attempt is not retried.
+NFC is optional: any supported kit card shows weekly status on the MSP LCD.
+After day 7's dispense command completes, or at midnight after day 7 if it
+was missed, the dashboard asks the worker to REFILL ALL 7 DAYS.
+
+UPDATE BOTH BOARDS; NO WIRING CHANGES
+1. ESP32: open ESP32/PharmaVault_ESP32S3/PharmaVault_ESP32S3.ino in Arduino IDE.
+   Keep your working ESP32S3 Dev Module / COM / USB settings and core 3.x.
+   No external Arduino libraries are required. Verify, then upload.
+   Do not erase all flash: this keeps Wi-Fi credentials, the saved timer,
+   stepper settings and previous daily lockouts/history.
+   Serial monitor 115200: send ? and check "PHARMAVAULT weekly firmware 1".
+2. MSP430: import/build CCS/PharmaVault_MSP430 as ONE CCS project, or load
+   its supplied Firmware/PharmaVault_MSP430.out using your working debugger.
+   Do not add the ImportAlternative project on top of the normal project.
+   Start/Resume the target. Console 9600 should show:
+   PHARMAVAULT MSP430 ready (weekly 1; UART fix 1)
+   CCS/PharmaVault_MSP430/README.txt gives the detailed import instructions.
+3. Join the existing PharmaVault Wi-Fi. Open http://192.168.4.1, or the
+   same-Wi-Fi address printed by the ESP32. Username demo; password printed
+   by ?. Refresh with Ctrl+F5. The page must show the seven-day pack panel.
+
+ONE-TIME WEEKLY SETUP
+4. Pause operation and remove previous contents. Confirm the motor direction
+   and saved steps per compartment using an EMPTY carousel if needed.
+   Previously verified stepper settings are retained; do not re-save them
+   during an active daily dose unnecessarily.
+5. Sync the clock from the laptop; check its Singapore date/time.
+6. Check the daily time and the later overdue-alert time, for example 13:00
+   and 14:00. Save only if changing them. They repeat without daily edits.
+7. Physically park EMPTY compartment 8 at the outlet/start reference so the
+   next forward one-compartment movement presents compartment 1. Remove
+   missed/old pills first. Load the correct doses for days 1-7 in compartments
+   1-7. Nothing should be dispensed merely by loading or parking the mechanism.
+8. In the weekly panel, tick BOTH confirmations (seven days filled, empty
+   compartment 8 physically parked). Click the refill/start-week button.
+   This records the pack, confirms position 8 and enables the saved schedule.
+   It sends no motor movement. Check the displayed week start date.
+   If any daily record already exists for today, the new pack starts TOMORROW
+   to preserve the one-attempt-per-date lockout. Otherwise it starts today.
+   Confirming after today's daily time can make day 1 available immediately;
+   it still requires a new hand presentation to move.
+
+EVERYDAY USE
+9. At/after the daily time, clear the IR area for at least 1 second, then hold
+   a hand near it continuously for 1.5 seconds. The carousel advances ONE
+   compartment and the date's record becomes Completed when commands finish.
+   Remove the hand afterward. Repeated presentations cannot repeat that date.
+   No card tap, daily refill or daily timer setting is needed.
+10. If not completed by the alert time, an overdue alert appears in this
+    local dashboard. A late attempt is allowed until midnight. The alert is
+    a webpage status, not a phone push/email/cloud notification.
+11. At the weekly refill reminder, remove remaining old/missed doses, park
+    at EMPTY 8 and refill all seven days. Confirm the two weekly checkboxes
+    again. The SAME daily/alert times remain selected.
+
+IF A DAY IS MISSED
+Each compartment remains assigned to its date. The next day must not receive
+yesterday's medicine. Rotation is blocked if today's compartment is not next.
+Pause; remove all missed doses before manually realigning the carousel.
+For day N, position the outlet at compartment N-1 (8 for day 1), confirm
+that actual position and the missed-dose handling checkbox, then re-enable.
+Alignment confirmation itself sends no motor movement. Do not motor-jog
+through loaded compartments. Never mark a position you have not checked.
+Days missed while off/paused are recorded as missed when the clock is restored.
+
+AFTER AN ESP32 RESTART
+The timer, weekly pack, refill reminder and daily attempts remain saved.
+The board has no battery-backed clock or position sensor: sync the clock,
+inspect missed doses, confirm actual alignment and explicitly enable again.
+Do NOT confirm a new refill merely to resume the same pack. No daily setup is
+needed while it stays powered and the normal sequence is followed.
+
+IR DEMO MODE
+For repeatable demonstrations without waiting for tomorrow, use an empty
+carousel or dummy contents. Start IR test mode, clear for 1 second, hold for
+1.5 seconds, remove the hand, wait for the 3-second motor pause and clear
+again. Repeat as needed. Test rotations do not advance weekly calendar days
+or count as daily doses. Stop the mode explicitly afterward. Starting tests
+invalidates a pending READY daily record; it cannot then be retried that day.
+
+See NORMAL_OPERATION.txt for recovery, TEST_CHECKLIST.txt for demonstration
+checks and VALIDATION.txt for build/test limits. WIRING.txt is unchanged.
+Motor command completion does not verify an exact pill count or ingestion.

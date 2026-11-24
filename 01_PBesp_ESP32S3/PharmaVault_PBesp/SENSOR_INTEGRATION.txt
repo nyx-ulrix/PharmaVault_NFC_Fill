@@ -1,0 +1,62 @@
+LOCAL PILLBOX SENSORS - ESP32-S3
+17 November 2026
+
+Pins: NTC divider junction GPIO1 (ADC1_CH0); DHT11 DATA GPIO2.
+Both circuits use the pillbox S3's 3V3 and GND. Existing 10k fixed resistor and
+10k NTC B3950 are retained: 3V3 -> fixed resistor -> GPIO1 node -> NTC -> GND.
+The DHT module's labelled DATA/3.3V/GND connections are unchanged in meaning;
+only their controller location changes. GPIO1/2 are raw chip GPIO numbers.
+
+API
+  PvPillboxSensors sensors;
+  setup: sensors.begin();
+  loop, only motor idle / no active hand timing:
+    if (sensors.sample(millis(), canBlock)) { ...copy readings...; invalidateIr(); }
+  Public fields: temperatureX100, rhX100, dhtDiagnosticX100, ntcMillivolts,
+    flags, sampledAt, hasSample.
+  flags: bit0 temperature outside20..30C; bit1 RH>60%; bit2 invalid sensor.
+  Invalid main temperature=-32768; invalid humidity=65535, as existing protocol.
+  fresh(now) is false after16s. due(now) first becomes true2s after begin and
+  then5s after the preceding transaction. No ADC/DHT read occurs if canBlock=false.
+
+Do not call sample during stepper motion. DHT's start signal waits20ms and
+capture is timing-sensitive. Do not call sample halfway through a legitimate
+1.5s hand hold, then repeatedly reset it. A suitable caller gate is motor idle
+and a currently observed clear IR input (HIGH), or no active operating mode;
+always invalidate the IR gesture after an actual sample. A permanently held
+hand may defer sensor refresh and correctly make its readings stale.
+
+NTC conversion uses16 calibrated analogReadMilliVolts samples and the nominal
+3300mV divider supply, fixed10k, R25=10k, Beta3950. Any sample near a rail
+(below50mV or above3050mV) marks the NTC invalid. This is a nominal calibration,
+not proof of absolute temperature accuracy. A DHT failure does not erase a
+valid NTC reading; it marks RH invalid and sets the sensor-fault flag.
+
+VENDORED DHT CODE
+The Arduino sketch includes DHT.h and DHT.cpp directly. Library Manager is not
+needed, and DHT_U.cpp (the Unified Sensor adapter) is not included. Preserve
+ADAFRUIT_DHT_LICENSE.txt with the files.
+Upstream: Adafruit DHT sensor library version1.4.6, MIT licence.
+https://github.com/adafruit/DHT-sensor-library/tree/1.4.6
+https://raw.githubusercontent.com/adafruit/DHT-sensor-library/1.4.6/DHT.h
+https://raw.githubusercontent.com/adafruit/DHT-sensor-library/1.4.6/DHT.cpp
+https://raw.githubusercontent.com/adafruit/DHT-sensor-library/1.4.6/license.txt
+Sources were read through the web tool after local shell DNS was unavailable;
+line-number display metadata was removed. Code and copyright text retained.
+
+Three documented changes to DHT.cpp for ESP32 fault handling:
+1. expectPulse uses the hardware-backed micros() counter for a true1ms bound
+   instead of assuming a digitalRead loop takes one CPU clock cycle.
+2. The40-bit capture aborts immediately on the first timeout, restoring
+   interrupts via the existing InterruptLock destructor.
+3. DHT11 fractional/reserved bits are checked as in the former MSP430 driver;
+   unsupported DHT22-style byte encoding is rejected instead of mislabelled.
+Valid DHT11 fractional and negative-value decoding remains unchanged.
+Normal capture is about4ms plus21ms of start/setup delays; deliberately slow
+malformed pulses can take longer, but each pulse is bounded and capture stops
+at the first timeout. These reads do not run during motor stepping.
+
+GPIO1 ADC1 verification:
+https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html
+ADC calibrated millivolts/attenuation API:
+https://docs.espressif.com/projects/arduino-esp32/en/latest/api/adc.html

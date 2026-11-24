@@ -1,0 +1,106 @@
+PHARMAVAULT - FRESH WINDOWS PC INSTALLATION
+17 November 2026
+
+A. FILES
+Extract the whole ZIP to a normal local folder, for example C:\PharmaVault.
+Do not compile from inside a ZIP or import every folder as a separate project.
+No existing code patches, Energia, external sensor libraries, PubSubClient or
+Python are needed to build the supplied firmware.
+
+B. ARDUINO IDE FOR BOTH ESP32 BOARDS
+1. Install Arduino IDE: https://www.arduino.cc/en/software
+2. Preferences -> Additional Boards Manager URLs: add
+   https://espressif.github.io/arduino-esp32/package_esp32_index.json
+3. Boards Manager -> esp32 by Espressif Systems -> choose version 3.3.12.
+   This is the API version used to prepare this release. Target compilation
+   on this authoring PC was blocked; see VALIDATION.txt for that distinction.
+4. Open the .ino INSIDE its named folder, retaining the supplied .h files.
+5. Plug in ONE ESP board at a time for the first upload to identify its COM
+   port clearly. Windows Device Manager -> Ports lists the assigned port.
+
+MAIN BOARD
+Sketch: 01_PBesp_ESP32S3/PharmaVault_PBesp/PharmaVault_PBesp.ino
+Board: ESP32S3 Dev Module.
+Use the board's actual USB interface and existing working flash/PSRAM settings.
+Do not infer flash or PSRAM capacity just from the words ESP32-S3.
+For native S3 USB CDC, enable USB CDC On Boot; for a board's separate USB-UART
+port/chip, use UART serial instead (USB CDC On Boot disabled). The board's
+USB port/USB device identity determines this, not the wireless firmware.
+Select the correct COM port, Verify, then Upload. Keep Erase All Flash disabled.
+Serial Monitor 115200 must show:
+  PHARMAVAULT PBesp wireless 2 (local sensors)
+Send ? if you missed startup. It prints your AP and dashboard credentials.
+
+SPARE BOARD
+Sketch: 02_ESPmsp_FireBeetle/PharmaVault_ESPmsp/PharmaVault_ESPmsp.ino
+Board: FireBeetle 2 ESP32-E (original V1.0 / DFR0654).
+FQBN: esp32:esp32:dfrobot_firebeetle2_esp32e
+Use its default 4MB/DIO board settings; this is not the ESP32S3 Dev Module.
+Select the FireBeetle's COM port, Verify, Upload; Serial Monitor 115200/Newline.
+Expect: PHARMAVAULT wireless bridge 1.
+Follow START_HERE.txt's SETUP wizard to pair it once to the main S3.
+
+IF A COM PORT IS MISSING
+Check the USB cable carries data. Identify the actual USB device/bridge chip
+in Device Manager before installing its driver. The FireBeetle's official
+board page links the correct driver; the generic S3 board may use a different
+chip or native USB. Do not blindly use the FireBeetle driver for the S3.
+Official board: https://wiki.dfrobot.com/dfr0654/
+Official Espressif installation guide:
+https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html
+
+C. CCS FOR MSP430F5529
+Install the NEW healthcare MSP430 firmware for this independent arrangement.
+The old weekly firmware samples sensors locally on the MSP and is not suitable
+after they have been moved to the pillbox S3.
+
+For a fresh MSP or source build:
+1. Install CCStudio IDE from https://www.ti.com/tool/CCSTUDIO
+   Select MSP430 family support and its TI USB debug-probe support. MSPM0/ARM
+   support is different and does not replace MSP430 support.
+2. Source builds use TI MSP430 compiler 21.6.2.LTS. Install that toolchain or
+   select it in project settings. The supplied binary was built with 21.6.2.
+   Compiler downloads: https://www.ti.com/tool/en-us/download/MSP-CGT
+3. File -> Import Projects -> select
+   03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430.
+   Import the discovered project ONCE. Merely opening main.c or adding a
+   folder to the workspace does not create a CCS build project.
+4. If regular project discovery fails, import the single fallback
+   ImportAlternative/PharmaVault_Healthcare_MSP430.projectspec instead, keeping its parent
+   files in place. Do not import both normal and alternative projects.
+5. Select PharmaVault_Healthcare_MSP430 -> Project -> Build Project(s).
+6. Connect the MSP430F5529 LaunchPad USB and choose Run -> Debug Project.
+   After the program loads/stops at main, press Resume/Run.
+7. MSP USB serial console is 9600 baud, 8N1, using its application/backchannel
+   UART COM port. The debug-probe connection is not that serial console.
+   Expect: PHARMAVAULT healthcare MSP430 ready (wireless provider 1).
+
+PREBUILT MSP OPTION
+The folder Firmware contains PharmaVault_Healthcare_MSP430.out (recommended for CCS Load
+Program) and .hex. With the supplied MSP430F5529 target configuration connected,
+load that .out and Resume. It does not require compiling the MSP sources.
+It is NOT an Arduino file, and the Firmware folder is NOT another CCS project.
+The source/project uses relative paths/IDE variables; no old PC username is
+required. Existing debugger metadata in the .out does not affect its execution.
+
+The healthcare MSP project contains its RC522/LCD drivers, remote protocol and
+linker file. Keep one copy of each .c file and one main.c. Its sensor values are
+received from PBesp. Thermistor10k/B3950 and DHT11 drivers are in the PBesp sketch
+folder, including licensed DHTsource. No extra Arduino sensorlibrary install.
+The old MSPADC/DHT sources are kept only inside the wired backup.
+
+D. COMPLETE THE DEVICE SETUP
+1. Wire as WIRING.txt, with power off first.
+2. Pair the bridge through SETUP as START_HERE.txt describes.
+3. Verify sensor readings/NFC using TEST_AND_DEMO.txt.
+4. For a genuinely new main S3, verify/save the stepper's observed one-slot
+   travel (default512 half-steps is a starting value), sync the clock, load
+   the seven correct day-specific compartments and confirm empty parking8.
+5. For the existing S3, retain saved settings. After any restart restore real
+   time/alignment and explicitly enable normal scheduling. Do not reset the
+   week merely because the computer changed.
+
+Official CCS guides:
+https://software-dl.ti.com/ccs/esd/documents/users_guide/ccs_installation.html
+https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs/ccs_getting-started.html
+https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs/ccs_project-management.html

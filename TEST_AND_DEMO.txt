@@ -1,0 +1,87 @@
+PHARMAVAULT - TEST BOTH INDEPENDENT STATIONS
+
+Use an empty carousel or dummy contents for motion tests.
+
+1. POWER / VERSIONS
+PBesp115200: PHARMAVAULT PBesp wireless 2 (local sensors).
+ESPmsp115200: PHARMAVAULT wireless bridge 1; after pairing BRIDGE ONLINE.
+MSP9600: PHARMAVAULT healthcare MSP430 ready (wireless provider 1).
+MSP must be running/resumed, not halted in the debugger.
+
+2. PILLBOX SENSORS WITHOUT PROVIDER
+Temporarily unplug only the FireBeetleUSB. Open PBesp dashboard from the laptop.
+Temperature/humidity should continue updating locally. PBesp prints:
+  PB SENSORS NTC_mV=...,temp_x100=...,rh_x100=...,DHT_temp_x100=...,flags=...
+temp_x100=2500 means25.00C; rh_x100=5000 means50.00%RH.
+The thermistor is preconfigured10k/B3950, fixed10k. New ADC uses calibrated
+millivolts, so its numeric raw diagnostic differs from the MSP ADC output.
+Touch the NTC briefly: its reading should trend upward. A disconnected sensor
+must become unavailable/fault rather than a plausible zero. Restore it with
+power off before continuing. Demo warnings are below20C/above30C orRH>60%.
+Those thresholds are demonstration settings, not medication-specific advice.
+
+3. RADIO AND PROVIDER READINGS
+Reconnect FireBeetle. It should restore its saved pair automatically.
+Dashboard shows healthcare station connected. Within fresh report cycles,
+MSP LCD should show the same temperature/humidity and box status. Readings
+are sent approximately every5s, so displays need not change simultaneously.
+RadioONLINE but no MSP updates: check FireBeetleD10/GPIO17->MSPP3.4 RX,
+localGND, correct new MSPfirmware, and Run/Resume.
+
+4. SAVE REFILL INFORMATION
+Open Refill on the dashboard. Enter a short demonstrative instruction for each
+Day1..7 (use your intended names/doses; this code does not choose medication).
+Press Save instructions. They persist on PBesp and do not change daily times,
+week dates or dose counts. Up to48 printableASCII characters each; doublequotes
+and backslashes are rejected. Commas/semicolons are permitted.
+
+5. TAP THE TAG ATTACHED TO THE BOX
+Remove the card from the reader for1s, then bring the reader/card together.
+The MSP requests that paired pillbox's weekly status and seven saved daytexts.
+Watch the LCD's DayN refill pages. Each16-character segment is shown about2.5s;
+all seven days are displayed once, then normal monitoring resumes.
+Blank instructions show Not set. Change one day on the dashboard, save, retap
+and verify the new text. No motor movement should be caused by any NFC tap.
+If No reply: check MSPP3.3TX->FireBeetleD11/GPIO16RX and bridgepairing.
+A new warning may interrupt the guide. Retap after inspecting it.
+
+6. IR MOTOR TEST
+Ensure motor settings reflect the observed one-compartment travel. In Test,
+tick empty/dummy contents and Start IR test mode. Clear the IR sensor1s, then
+hold a hand1.5s. One compartment should rotate. Remove hand, wait3s cooldown,
+and repeat. Stop test mode. FireBeetle/MSP are not in the actuation path.
+
+7. REPEATABLE TIMER / WIRELESS OVERDUE DEMO
+Start timer test from Test, with the empty/dummy confirmation.
+10s afterStart: READY, without automatic motor movement.
+30s afterStart with no completed test: TEST OVERDUE on dashboard.
+Within the next provider report cycle, MSP should show TEST overdue as well.
+This is a test warning, not a saved real missed-medication record.
+Clear1s then hold1.5s: one late test rotation; dashboard becomesCOMPLETED and
+provider returns to its ordinary test status after the next report.
+A second hand must not rotate again until Restart timer test is pressed.
+Wait cooldown, tick confirmation, Restart to repeat without waiting a day.
+Starting physical tests cancels an existing pending READY daily dose asFAULT;
+it does not reset saved daily times or the seven-day count.
+
+8. REAL MISSED/OVERDUE INFORMATION
+For normal operation use the correct real date/time and saved daily schedule.
+At the real overdue deadline an uncompleted day creates a dated alert; retained
+missed days also make the provider's missed/overdue warning appear. Inspect the
+dashboard's dated history to identify which day. Do not change the calendar
+backward to replay a dose. Use timer test for repeated demonstrations instead.
+
+9. LOST LINK / RECOVERY
+Pause tests for this observation. Unplug ESPmspUSB. PBesp continues local
+sensing and existing schedule state. The MSP must mark remote readings/status
+stale after about16s without reports. No fresh values should be fabricated.
+Reconnect ESPmsp. Wait for fresh readings, then retap the card. No dose/reset
+should happen merely because the connection returns. If a tap occurred while
+offline, remove/retap after recovery; old buffered requests are discarded.
+
+10. NORMAL OPERATION AFTER TESTS
+Stop tests, inspect actual contents/alignment, restore realclock afterreboot,
+confirm physical position and enable the normal saved schedule.
+The first new pack needs seven filled day-specific slots and empty parking8.
+Uploading firmware or moving computers is not a reason to confirm another pack.
+Closing the page does not stop an active test; use Stop or restartPBesp.

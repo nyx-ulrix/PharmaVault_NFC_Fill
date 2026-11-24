@@ -1,0 +1,72 @@
+PHARMAVAULT WEEKLY DEMONSTRATION CHECKLIST
+Use an empty mechanism or dummy contents while testing movements.
+
+1. FIRMWARE / CONNECTION
+   ESP32 115200 -> ? prints PHARMAVAULT weekly firmware 1 and dashboard URL.
+   MSP430 9600 -> reset/resume prints ready (weekly 1; UART fix 1).
+   Join Wi-Fi, load dashboard, Ctrl+F5; seven-day and IR test panels visible.
+   Check temperature and humidity update; compare against room conditions.
+
+2. REPEATED IR/MOTOR TEST (NO CLOCK/DAILY TIMER NEEDED)
+   Verify stepper steps/direction on the empty eight-compartment mechanism.
+   Start IR test mode with empty/dummy confirmation. No immediate rotation.
+   Clear sensor for 1 s, then hold hand 1.5 s -> one compartment advance.
+   Remove hand, wait 3 s motor cooldown and 1 s clear; repeat twice.
+   Holding the hand continuously must not cause repeat movements.
+   Test counter increases; daily records do not become Completed.
+   Stop test mode. Actual physical alignment must be reconfirmed afterward.
+
+3. WHOLE-WEEK SETUP
+   Sync clock; save daily time shortly ahead and alert time later on the same
+   date. Remove old dummy contents, park empty compartment 8; fill 1-7 with
+   clearly labelled day-specific dummy packs. Tick both weekly confirmations.
+   Start/refill week. No motor movement should occur at confirmation.
+   Check the displayed start date: if today already has a history record,
+   the new pack starts tomorrow. Do not erase history to work around this.
+
+4. OPTIONAL NFC
+   Before initial week confirmation, a card should show Load 7 days.
+   During active pack, a card shows Week day N of 7 (or Week starts soon).
+   Every valid kit card works without website UID assignment.
+   Tapping never moves the motor, records a daily dose or resets the week.
+   The weekly message lasts 8 s, then environmental LCD status returns.
+
+5. DAILY TIME / IR DISPENSE
+   Before due: hand hold does not dispense in NORMAL mode.
+   At due: today becomes READY; motor still stays stationary.
+   Clear sensor, hold 1.5 s -> today's compartment advances one position.
+   History becomes Completed after steps finish; visually check dummy release.
+   Another hand presentation that date does not dispense again.
+   Do not start IR test mode mid-check: it deliberately cancels pending READY.
+
+6. OVERDUE / MISSED DAY
+   On a fresh scheduled date, wait past alert time without a hand presentation.
+   Dashboard shows overdue; a late hand attempt remains possible until midnight.
+   If deliberately missed, next day must target the NEXT DATE'S compartment,
+   with movement blocked until missed contents are removed and its predecessor
+   is manually aligned/confirmed. Alignment confirmation alone does not rotate.
+   Days skipped while paused/off appear as MISSED after clock restoration.
+
+7. DAY 7 / WEEKLY REFILL
+   Day 7 command completed -> REFILL ALL 7 DAYS immediately.
+   Day 7 missed -> the same reminder at midnight entering day 8.
+   Seven dates count even if some were missed. No eighth medication dose.
+   Card now shows Refill all 7days / Confirm in web.
+   Refill/park/confirm once; verify the same saved times remain unchanged.
+
+8. RESTART
+   With no movement running, restart ESP32: motor stays off and schedule pauses.
+   Saved timer, pack dates, refill latch and past attempts remain.
+   Restore clock/alignment, enable. A completed date cannot run twice.
+   If MSP alone restarts, readings/card lookup recover without requiring a new
+   weekly refill or stopping ESP32 daily mode.
+
+Day progression is based on the real Singapore calendar, not test rotations.
+For a quick live demonstration, use repeatable IR test mode and show the normal
+timer once. Do not change the laptop calendar or erase flash to simulate days
+on a unit holding real medicine. The included host validation simulates seven
+days, missed days, faults and restarts without physical dispensing.
+
+Log actual observations: measured temperature/humidity, card LCD result,
+stepper alignment after multiple moves, IR hold/clear behavior, USB power
+stability and dummy-pill release. Software tests cannot verify these for you.

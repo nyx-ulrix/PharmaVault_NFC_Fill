@@ -1,0 +1,16 @@
+{
+  "name": "PharmaVault independent wireless",
+  "date": "2026-11-17",
+  "pb_esp_board": "ESP32S3 Dev Module",
+  "espmsp_board": "FireBeetle 2 ESP32-E / original DFR0654 V1.0",
+  "arduino_esp32_core": "3.3.12",
+  "msp_device": "MSP430F5529",
+  "msp_compiler": "TI 21.6.2.LTS",
+  "pb_esp_sketch": "01_PBesp_ESP32S3/PharmaVault_PBesp/PharmaVault_PBesp.ino",
+  "espmsp_sketch": "02_ESPmsp_FireBeetle/PharmaVault_ESPmsp/PharmaVault_ESPmsp.ino",
+  "msp_program": "03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430/Firmware/PharmaVault_Healthcare_MSP430.out",
+  "wired_backup": "04_WIRED_BACKUP",
+  "credentials": "Configured at runtime, no device credentials bundled",
+  "esp_native_compile_verified": false,
+  "physical_hardware_verified": false
+}

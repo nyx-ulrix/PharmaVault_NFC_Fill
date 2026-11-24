@@ -1,128 +1,109 @@
-PHARMAVAULT - NFC DISPENSING AND FILL-HEIGHT PERCENTAGE
+PHARMAVAULT - INDEPENDENT PATIENT PILLBOX + HEALTHCARE STATION
+17 November 2026
 
-WHAT CHANGED
-When tap dispensing is enabled, a recognized card assigned to a calibrated
-compartment commands this sequence:
-  SG90 closes -> SG92R positions that compartment -> SG90 opens -> SG90 closes.
-The motors receive PWM one at a time. The existing manual controls remain.
-Ultrasonic distance now produces an estimated fill-height percentage after
-you capture an empty reference (0%) and the intended full reference (100%).
-No additional components, wires, physical buttons or switches are required.
+FINAL ARRANGEMENT
+PBesp = ESP32-S3 in the patient's pillbox. It owns the IR hand sensor, NTC,
+DHT11, ULN2003/28BYJ-48, dashboard, saved schedule and seven-day dose journal.
+ESPmsp = original FireBeetle ESP32-E V1.0 beside the healthcare MSP430.
+It is the wireless-to-UART bridge. MSP430 owns RC522 NFC, LCD and Booster LEDs.
 
-UPDATE BOTH BOARDS
-ESP32:
-  Open ESP32/PharmaVault_ESP32S3/PharmaVault_ESP32S3.ino in your working
-  Arduino IDE. Use ESP32S3 Dev Module, Arduino-ESP32 core3.x, your existing
-  working port/USB settings. Upload without erasing all flash.
-  No additional Arduino libraries or source edits are required.
-  Serial Monitor115200, send ?; expected:
-    PHARMAVAULT NFC + fill firmware 1
+  [Patient pillbox: sensors + motor + PBesp]
+                  <--- protected Wi-Fi --->
+  [ESPmsp FireBeetle <-- local UART --> MSP430 + NFC reader + LCD]
 
-MSP430:
-  The simplest route is to load the included, precompiled
-    CCS/PharmaVault_MSP430/Firmware/PharmaVault_MSP430.out
-  through your existing CCS debug target, then Resume/Run.
-  To rebuild instead, replace main.c, rc522.c AND rc522.h in your current
-  project with the included versions. Build, Debug/load, then Resume/Run.
-  Do not add second copies of these source files.
-  MSP debug console9600, expected startup marker:
-    PHARMAVAULT MSP430 ready (NFC sequence 1; UART fix 1)
-  Project import details are in CCS/PharmaVault_MSP430/README.txt.
+The healthcare laptop joins PBesp's PharmaVault Wi-Fi and opens its dashboard.
+No signal, 5V, 3V3 or ground jumper is required between the two stations after
+the motor power and environmental sensors are moved as WIRING.txt describes.
+Each station still needs USB power. Wireless does not add a battery/charger.
+For a bench demo both stations may use laptop USB ports; there are no direct
+GPIO/power jumpers between their PCBs. The Wi-Fi link needs no external router.
 
-The old MSP firmware cannot provide the removal/heartbeat events required
-for the new automatic mode. Temperature/humidity/UART pins stay unchanged.
+COMPLETE FILES - NO EARLIER PATCH REQUIRED
+1. 01_PBesp_ESP32S3/PharmaVault_PBesp/PharmaVault_PBesp.ino
+   -> patient ESP32-S3, Arduino board ESP32S3 Dev Module.
+2. 02_ESPmsp_FireBeetle/PharmaVault_ESPmsp/PharmaVault_ESPmsp.ino
+   -> spare original FireBeetle, Arduino board FireBeetle 2 ESP32-E.
+3. 03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430/
+   -> healthcare MSP430F5529 CCS project, with prebuilt Firmware .out/.hex.
+4. 04_WIRED_BACKUP/
+   -> your original RepeatTimer wired package, preserved byte-for-byte.
 
-DASHBOARD
-Join your existing PharmaVault Wi-Fi and open http://192.168.4.1/.
-Username demo; use the existing password printed by ? on ESP serial.
-Refresh with Ctrl+F5. Existing Wi-Fi credentials, NFC assignments, flap
-positions and carousel positions remain saved. Tap dispensing starts PAUSED
-after every ESP restart or MSP reader restart/reconnect.
+The MSP430 MUST use the new healthcare firmware for this arrangement: its
+environment readings now arrive wirelessly instead of its old ADC/DHT pins.
+Keep every supplied .h/.cpp beside its .ino. Sensor library sources/licenses
+are already included; no Library Manager sensor downloads or patching needed.
 
-NFC SETUP - KEEP TAP DISPENSING PAUSED
-1. In Flap positions - SG90, test and save the actual open/closed positions
-   with the final linkage. Previously saved verified positions are retained.
-2. In Carousel positions - SG92R, test/save each reachable compartment's
-   alignment. Use real measured positions, not invented evenly spaced angles.
-   Previously saved positions are retained.
-3. Tap a card while mode is paused. In Assign NFC tags to compartments,
-   select its slot, Use last scanned tag, then Save assignment.
-4. In the NFC section, confirm the mechanism/calibration checks and click
-   Enable tap dispensing. This enables the mode; it does not move a motor.
-5. Remove all cards. Wait for the reader-clear/Ready message (up to about5s
-   if the reader was already empty). Then tap the assigned card.
+FIRST INSTALL
+1. Extract the WHOLE ZIP. On a fresh PC, follow FRESH_PC_INSTALL.txt.
+2. Power off all boards, then follow WIRING.txt. The old thermistor/DHT11 and
+   ULN2003 power connections to the MSP430 MUST move to the pillbox S3.
+3. Upload the three matching programs above. Do not erase the existing S3's
+   flash: that preserves credentials, daily times, pack dates and dose history.
+4. MSP430: load/debug, then Resume/Run. Do not leave it stopped at main.
+5. Pair ESPmsp once using the procedure below.
+6. Join PharmaVault Wi-Fi on the laptop, open http://192.168.4.1, Ctrl+F5.
+7. In Refill, enter the Day1..Day7 refill instructions and Save instructions.
+8. Run TEST_AND_DEMO.txt to verify readings, card lookup, warnings and motion.
 
-WHAT A TAP DOES
-The selected compartment must have a saved carousel position and the flap
-must have saved distinct open/closed positions. An accepted tap commands:
-  GPIO3 SG90 closed650ms
-  detach GPIO3 -> GPIO5 SG92R saved compartment position1000ms
-  detach GPIO5 -> GPIO3 SG90 open650ms, then closed650ms
-  detach GPIO3. Total commanded motion is about2.95 seconds.
-The final log records that PWM was sent, not proof that medicine emerged.
+PAIR ESPmsp TO PBesp ONCE
+1. Open PBesp's Serial Monitor at115200 baud. Send ?.
+   Expected banner: PHARMAVAULT PBesp wireless 2 (local sensors)
+2. Copy its 'Wi-Fi name' (PharmaVault-...) and 32-character 'Wi-Fi password'.
+3. Select the FireBeetle's COM port. Serial Monitor115200, line ending Newline.
+   Expected banner: PHARMAVAULT wireless bridge 1
+4. Send SETUP. Enter the exact PBesp Wi-Fi name, then its exact Wi-Fi password
+   at the two prompts. No source-code credentials need editing.
+5. Expect 'Pair saved' and 'BRIDGE ONLINE'. Pairing is saved in the FireBeetle
+   and reconnects automatically. Send ? there to see connection/frame counters.
+6. Dashboard username: demo; password: PBesp's printed Wi-Fi password.
+   The dashboard should say the healthcare station is connected.
+   Windows may report No Internet on this access point; stay connected.
+   Use automatic DHCP for the laptop. Do not assign it192.168.4.1: that is
+   PBesp's address, not the laptop's. Open http://, not https://.
+7. The MSP430 serial console remains9600baud. Its new banner is:
+   PHARMAVAULT healthcare MSP430 ready (wireless provider 1)
 
-Holding a card in the reader does not intentionally repeat the cycle. Remove
-it for at least one second, wait at least three seconds after the previous
-motion finishes, then retap for another cycle. Busy/cooldown requests are
-rejected, not saved as a future cycle. A new tap waiting over about500ms
-before its first UART transmission expires and must be repeated.
-UART retries reuse their sequence and cannot start duplicate cycles.
-Unassigned cards and slots without calibrated positions do not actuate.
+WHAT NFC DOES
+Attach a compatible kit card/tag physically to this pillbox. Bring the RC522
+reader to it, or bring the box/tag near the reader. This build handles ONE
+wirelessly paired pillbox. A scan opens information from that paired PBesp;
+UIDs do not automatically select among several unrelated boxes.
+The MSP receives weekly status, fetches Days1..7 refill instructions, then
+pages through them on its16x2LCD. Instructions are up to48 printable ASCII
+characters per day, shown in16-character segments. A blank day shows Not set.
+No medicine names or doses are invented. Enter the intended instructions.
+Retap after editing instructions to fetch the new copy. A tap never dispenses,
+resets the week, confirms refill or changes the daily timer.
 
-Pause tap dispensing before registering cards, changing dummy contents or
-calibrating. Accepted manual movement/calibration/tag edits also pause it.
-After restart/reconnect/PWM fault, inspect the mechanism before re-enabling.
-Pause mode prevents later taps; it is not an emergency stop and does not
-interrupt a motor sequence already executing. HTTP/dashboard refreshes may
-pause during the sequence, while the MCU UART continues to be serviced.
+MONITORING
+PBesp reads local NTC temperature and DHT11 humidity approximately every5s,
+deferring reads during motor motion/active hand timing. It sends readings,
+sensor/environment warnings, missed/overdue and refill status to the provider.
+The MSP LCD alternates environment/box status when not showing refill pages.
+New warnings interrupt the guide; a repeated unchanged warning does not
+continuously restart it. The dashboard contains the full dated dose history.
+After about16s without fresh provider messages, the MSP marks data stale and
+does not present old temperatures as current. The FireBeetle reconnects by
+itself. PBesp's local sensing/scheduling continues if the provider is off.
 
-FILL-HEIGHT PERCENTAGE
-Mount the HC-SR04 above the viewed compartment, aimed at its bottom and the
-top surface of the contents. Keep it fixed while capturing these references:
-1. Pause tap dispensing.
-2. Empty the viewed compartment. Wait for Ready to capture, confirm, then
-   click Capture 0% empty. This saves distance E.
-3. Fill to the intended maximum level with representative dummy contents.
-   Wait for steady readings, confirm, then Capture 100% full. This saves F.
-4. The display estimates:
-     fill percent = 100 * (E - measured distance) / (E - F)
-   Example E150mm, F50mm: 150mm=0%, 125mm=25%, 100mm=50%, 50mm=100%.
+NORMAL USE AND TESTS
+The daily time ARMS that day's compartment; a fresh hand held1.5s moves the
+stepper once. IR is activeLOW; no website calibration is needed. Seven medicine
+compartments keep their assigned dates, with slot8 empty parking. Refill is
+confirmed for the whole week, not each day. NFC is not required for dispensing.
+The normal weekly timer and the repeatable10s READY/30s OVERDUE test remain.
+Test overdue is explicitly labelled TEST on the dashboard and provider LCD.
+There is no ultrasonic fill sensor or SG90/SG92R in this release.
 
-The full surface must remain at least20mm from the sensor. E-F must be at
-least20mm; empty distance must therefore be at least40mm. Use more clearance
-if the actual mounted setup needs it to produce repeatable echoes.
-The estimate uses the median of five consecutive valid distance readings,
-spread<=10mm and latest age<=2s. Missing/stale/unstable echoes or motor motion
-make it unavailable. Small deviations up to10mm beyond a reference clamp
-to0%/100%; distances farther outside that band are unavailable.
+After PBesp upload/restart, restore the real clock and actual alignment, then
+explicitly enable normal operation. The saved timer is retained; do not start
+a new pack merely because the PC or firmware changed. NORMAL_OPERATION.txt
+describes missed-day handling and retained daily lockouts.
 
-This estimates the height of the reflecting contents surface, not pill
-count, remaining doses or exact volume. Uneven piles, gaps and narrow walls
-can give misleading returns. Test repeatability in the actual dispenser.
-It measures the current view only. It does not store an inventory reading
-for all eight compartments. A common calibration is suitable only when the
-viewed compartments have matching geometry and full/empty reference heights.
-The software cannot verify which compartment is physically under the sensor.
-
-The previous arbitrary 'loaded' reference is deliberately NOT converted to
-100% full. Capture both new references once. They then persist across restart.
-Recalibrate after moving the sensor or changing the compartment geometry.
-
-UNCHANGED WIRING
-  SG90 flap signal GPIO3; SG92R carousel signal GPIO5.
-  MSP P3.3 TX -> ESP GPIO4 RX; ESP GPIO17 TX -> MSP P3.4 RX; link9600 8N1.
-  HC-SR04 TRIG GPIO13; VCC confirmed5V; GND common with both MCUs.
-  HC ECHO -> existing2.2k -> GPIO14 junction -> existing3.2k -> commonGND.
-  Keep all grounds common. Keep the independently working servo5V supply
-  arrangements; do not join different USB sources' positive5V rails together.
-  NTC, DHT11 and RC522 retain their existing3.3V connections.
-
-Two connected servos still share the limits of their USB source and wiring.
-Sequential PWM reduces simultaneous commanded motion but does not prove
-adequate power under load. A command-completed message is not motor feedback.
-No schedules, per-dose lockout, phone/cloud alerts or verified intake are
-implemented. Each accepted fresh tap requests another cycle; demonstrate
-with dummy contents and only mechanically reachable carousel positions.
-
-See DEMO_TEST.txt for end-to-end tests, VALIDATION.txt for build evidence.
-HC-SR04 datasheet: https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf
+BACKUP AND LIMITS
+WIRED_BACKUP_RESTORE.txt restores the original firmware AND original sensor/
+power wiring. Do not mix its older MSP program with this new PBesp layout.
+Overdue alerts are local dashboard/LCD notices, not email/SMS/cloud pushes.
+Completion means commanded steps finished; pill delivery is not measured.
+VALIDATION.txt distinguishes native MSP build, host tests and unverified
+ESP32 target compilation/physical operation. All required sources are included.
