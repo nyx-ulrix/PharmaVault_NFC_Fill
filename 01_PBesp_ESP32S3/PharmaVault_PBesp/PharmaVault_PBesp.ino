@@ -2,7 +2,7 @@
  * AI-assisted prototype. Team: record actual authors, changes and personal reflections.
  * 28BYJ-48 via ULN2003 IN1/2/3/4 -> GPIO5/6/7/8; IR OUT -> GPIO14 at3.3V.
  * Local sensors: GPIO1 ADC1 NTC10k/B3950; GPIO2 DHT11 DATA, both 3V3.
- * No servo is used. GPIO3 and GPIO13 are unused inputs; each station has its own local common ground.
+ * No servo is used. GPIO3 is an unused input; GPIO13 is driven HIGH to power the NTC divider; each station has its own local common ground.
  * MSP430 link arrives over the paired FireBeetle Wi-Fi bridge; S3 GPIO4/17 unused.
  * 13:00 Singapore makes the next dose available WITHOUT motor movement.
  * A fresh continuous1.5s hand presentation advances one compartment to dispense.
@@ -176,7 +176,7 @@ static_assert(sizeof(DashboardHtml)-1==PV_DASHBOARD_SRC_LEN,"Dashboard HTML chan
 // Methods stay inside the class so Arduino does not generate invalid forward declarations.
 class PharmaVault {
  private:
-  static constexpr uint8_t RetiredServo=3,IrPin=14,RetiredTrigger=13,UartRx=4,UartTx=17,SlotCount=8;
+  static constexpr uint8_t RetiredServo=3,IrPin=14,NtcSupplyPin=13,UartRx=4,UartTx=17,SlotCount=8;
   static constexpr uint8_t Step1=5,Step2=6,Step3=7,Step4=8;
   static constexpr uint32_t NetworkMagic=0x50564E31,WeekMagic=0x50565731;
   static constexpr uint32_t StepperMagic=0x50565331;
@@ -837,7 +837,8 @@ class PharmaVault {
  public:
   void begin(){
     pinMode(RetiredServo,INPUT);pinMode(Step1,OUTPUT);pinMode(Step2,OUTPUT);pinMode(Step3,OUTPUT);pinMode(Step4,OUTPUT);writeCoils(0);
-    pinMode(RetiredTrigger,INPUT);pinMode(IrPin,INPUT_PULLUP);pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
+    pinMode(NtcSupplyPin,OUTPUT);digitalWrite(NtcSupplyPin,HIGH);  // 3.3 V for the NTC divider (max 0.33 mA)
+    pinMode(IrPin,INPUT_PULLUP);pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
     loadSettings();WiFi.onEvent([](arduino_event_id_t e,arduino_event_info_t info){if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)Serial.printf("WIFI client joined (aid %u)\n",unsigned(info.wifi_ap_staconnected.aid));else if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED)Serial.printf("WIFI client left (aid %u, reason %u)\n",unsigned(info.wifi_ap_stadisconnected.aid),unsigned(info.wifi_ap_stadisconnected.reason));else if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)Serial.printf("WIFI home network lost (reason %u)\n",unsigned(info.wifi_sta_disconnected.reason));else if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP)Serial.println("WIFI home network connected");});WiFi.mode(WIFI_AP_STA);WiFi.setSleep(false);WiFi.setAutoReconnect(false);snprintf(apSsid,sizeof(apSsid),"PharmaVault-%012llX",static_cast<unsigned long long>(ESP.getEfuseMac()&0xFFFFFFFFFFFFULL));
     const IPAddress ip(192,168,4,1),mask(255,255,255,0);apStarted=WiFi.softAPConfig(ip,ip,mask,IPAddress(uint32_t(0)),ip)&&WiFi.softAP(apSsid,accessPassword);if(apStarted)dns.start(53,"pharmavault",ip);if(MDNS.begin("pharmavault"))MDNS.addService("http","tcp",80);msp.begin(accessPassword);startWeb();if(network.magic==NetworkMagic)WiFi.begin(network.ssid,network.password);printAccess();
   }

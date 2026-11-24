@@ -29,7 +29,7 @@ IR HAND SENSOR - UNCHANGED
 THERMISTOR - MOVE THE WHOLE EXISTING DIVIDER
   Remove its junction connection from MSP P7.0/A12/H2.28.
   Remove its supply/ground connections from the MSP430.
-  PBesp3V3 -> existing fixed10k resistor -> junction.
+  PBesp GPIO13 (driven HIGH = 3.3 V by firmware) -> existing fixed10k resistor -> junction.
   Junction -> PBesp GPIO1 (ADC1_CH0).
   Junction -> existing10k NTC, Beta3950 -> PBespGND.
   The NTC is the lower leg towardGND; fixed10k is the upper leg toward3V3.
@@ -42,7 +42,7 @@ DHT11 HUMIDITY MODULE - MOVE ALL THREE CONNECTIONS
   Follow your module's labelled DATA/3.3/GND positions. No extra divider is
   used on DATA. Primary temperature is NTC; DHT temperature is diagnostic.
 
-PBesp GPIO3,4,13,17 remain UNUSED in wireless mode. No UART wire goes to the
+PBesp GPIO3,4,17 remain UNUSED in wireless mode. GPIO13 supplies the NTC divider. No UART wire goes to the
 MSP430. No SG90/SG92R/HC-SR04 or old ultrasonic divider is used.
 
 B. HEALTHCARE STATION - MSP430 + ESPmsp FIREBEETLE

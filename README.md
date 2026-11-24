@@ -67,7 +67,7 @@ Power everything off first. Full details are in `WIRING.txt`.
 | ULN2003 IN1 to IN4 | GPIO5, 6, 7, 8 |
 | ULN2003 power | 5 V (USB VBUS) and GND of the S3 |
 | IR sensor | VCC 3V3, GND, OUT to GPIO14 (active LOW) |
-| NTC 10 kΩ B3950 | 3V3 to 10 kΩ fixed resistor to junction to NTC to GND. Junction to GPIO1 (ADC1_CH0) |
+| NTC 10 kΩ B3950 | GPIO13 (firmware holds it at 3.3 V) to 10 kΩ fixed resistor to junction to NTC to GND. Junction to GPIO1 (ADC1_CH0) |
 | DHT11 | VCC 3V3, GND, DATA to GPIO2 |
 
 **Healthcare station (MSP430 + FireBeetle)**
