@@ -41,7 +41,7 @@ FIRST INSTALL
    flash: that preserves credentials, daily times, pack dates and dose history.
 4. MSP430: load/debug, then Resume/Run. Do not leave it stopped at main.
 5. Pair ESPmsp once using the procedure below.
-6. Join PharmaVault Wi-Fi on the laptop, open http://192.168.4.1, Ctrl+F5.
+6. Join PharmaVault Wi-Fi on the laptop, open http://pharmavault (or http://192.168.4.1), Ctrl+F5.
 7. In Refill, enter the Day1..Day7 refill instructions and Save instructions.
 8. Run TEST_AND_DEMO.txt to verify readings, card lookup, warnings and motion.
 

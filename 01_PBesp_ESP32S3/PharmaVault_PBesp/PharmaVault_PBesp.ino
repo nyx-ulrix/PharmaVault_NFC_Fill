@@ -21,6 +21,8 @@
  */
 #include <Arduino.h>
 #include <WebServer.h>
+#include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <WiFi.h>
 #include <Preferences.h>
 #include <esp_random.h>
@@ -549,7 +551,7 @@ async function refresh() {
       const preceding=pending?(state.today.slot+6)%8+1:0;
       el('alignmentStatus').textContent=state.positionKnown?'Current aligned/last released compartment: '+state.currentSlot+'. Next physical step reaches compartment '+(state.currentSlot%8+1)+'. Calendar-day eligibility is checked separately; no loaded missed compartment is skipped automatically.':
         pending?'Position unknown. Pause, manually remove any missed medicine, and visually confirm the preceding compartment '+preceding+' to release today’s day-specific compartment '+state.today.slot+'. Do not rotate past a loaded missed compartment.':'Position unknown. With the schedule paused, manually remove missed medicine and verify the current compartment. A new week must start at empty parking compartment 8.';
-      el('networkStatus').textContent=state.lanIp?'Same-Wi-Fi dashboard: http://'+state.lanIp+'. Access point: http://192.168.4.1':'ESP32 access point: http://192.168.4.1';
+      el('networkStatus').textContent=state.lanIp?'On your home Wi-Fi: http://pharmavault.local or http://'+state.lanIp+'. On the PharmaVault Wi-Fi: http://pharmavault':'On the PharmaVault Wi-Fi: http://pharmavault (or http://192.168.4.1)';
       el('bridgeStatus').textContent=state.bridgeOnline===true?'Healthcare station connected: pillbox readings/status are sent to the MSP430.':'Healthcare station disconnected. Pillbox sensors and dispensing continue locally.';
 
       renderIr();renderToday();renderIrTest();renderWeek();renderRefillInstructions();
@@ -577,7 +579,7 @@ async function refresh() {
       if(!el('alertSummary').hidden)el('alertSummary').textContent='LAST RECEIVED ALERT: overdue records remain. Reconnect to check their current status.';
     }
   }
-  controls();setTimeout(refresh,250);
+  controls();setTimeout(refresh,document.hidden?5000:1000);
 }
 for(let day=1;day<=7;day++)el('instructionDay'+day).addEventListener('input',()=>{instructionsDirty=true;controls();});
 el('refillInstructionForm').addEventListener('submit',saveRefillInstructions);
@@ -786,7 +788,7 @@ class PharmaVault {
   // Day labels are historical snapshots; old firmware history remains readable.
   struct DailyRecord {uint32_t day,preparedAt,completedAt;uint8_t slot,state,overdue,reserved;char label[17];uint8_t padding[3];};
   struct DailyJournal {uint32_t magic,maxDay;DailyRecord records[SlotCount];};
-  WebServer web{80};PvWirelessSerial msp;Preferences prefs;
+  WebServer web{80};DNSServer dns;PvWirelessSerial msp;Preferences prefs;
   NetworkSettings network{};WeekSettings week{};
   char statusChunk[2200]{}; // Reused on the main loop; keep large status buffers off its stack.
   static constexpr uint32_t RefillTextMagic=0x50564D31;
@@ -1270,7 +1272,7 @@ class PharmaVault {
   void noCache(){web.sendHeader("Cache-Control","no-store");}
   bool authorize(){if(web.authenticate("demo",accessPassword))return true;web.requestAuthentication(BASIC_AUTH,"PharmaVault");return false;}
   const char *activeToken(uint32_t now){if(phase!=Phase::Idle)return "";if(!token[0]||elapsed(now,tokenAt,TicketLifetimeMs)){randomHex(token);tokenAt=now;}return token;}
-  bool consumeToken(){if(phase!=Phase::Idle||!token[0]||elapsed(millis(),tokenAt,TicketLifetimeMs)||web.arg("token")!=token){web.send(409,"text/plain","Request expired or already used. Refresh before retrying.");return false;}token[0]=0;return true;}
+  bool consumeToken(){if(phase!=Phase::Idle||!token[0]||elapsed(millis(),tokenAt,TicketLifetimeMs)||web.arg("token")!=token){web.send(409,"text/plain","Someone else just made a change, or this page sat open too long. Check the screen and try again.");return false;}token[0]=0;return true;}
   bool requireStorage(){if(storageOk)return true;web.send(503,"text/plain","Settings storage unavailable. Automatic operation is stopped.");return false;}
   bool confirmed(){if(web.arg("confirm")=="1")return true;web.send(400,"text/plain","Confirm this setup change.");return false;}
   bool setupRequest(){if(!authorize())return false;noCache();return requireStorage()&&confirmed();}
@@ -1416,21 +1418,21 @@ class PharmaVault {
     web.on("/refill/instructions",HTTP_POST,[this]{saveRefillInstructions();});web.on("/week/refill",HTTP_POST,[this]{refillWeek();});web.on("/wifi",HTTP_POST,[this]{saveWifi();});
     web.onNotFound([this]{if(!authorize())return;noCache();web.send(404,"text/plain","Not found");});web.begin();
   }
-  void printAccess(){Serial.println();Serial.println("PHARMAVAULT PBesp wireless 2 (local sensors)");Serial.println("ULN2003 IN1/2/3/4 = GPIO5/6/7/8; GPIO3 unused; IR OUT=GPIO14 at3.3V, LOW=hand, hold=1500ms.");Serial.println("Sensor link: FireBeetle wireless bridge on TCP 4210; S3 GPIO4/17 unused.");Serial.print("Wi-Fi name: ");Serial.println(apSsid);Serial.print("Wi-Fi password: ");Serial.println(accessPassword);Serial.println("Dashboard: http://192.168.4.1");Serial.println("Dashboard username: demo");Serial.print("Dashboard password: ");Serial.println(accessPassword);if(WiFi.status()==WL_CONNECTED){Serial.print("Same-Wi-Fi dashboard: http://");Serial.println(WiFi.localIP());}}
+  void printAccess(){Serial.println();Serial.println("PHARMAVAULT PBesp wireless 2 (local sensors)");Serial.println("ULN2003 IN1/2/3/4 = GPIO5/6/7/8; GPIO3 unused; IR OUT=GPIO14 at3.3V, LOW=hand, hold=1500ms.");Serial.println("Sensor link: FireBeetle wireless bridge on TCP 4210; S3 GPIO4/17 unused.");Serial.print("Wi-Fi name: ");Serial.println(apSsid);Serial.print("Wi-Fi password: ");Serial.println(accessPassword);Serial.println("Dashboard: http://pharmavault (or http://192.168.4.1)");Serial.println("Dashboard username: demo");Serial.print("Dashboard password: ");Serial.println(accessPassword);if(WiFi.status()==WL_CONNECTED){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}}
   void printDiagnostics(){char line[260];snprintf(line,sizeof(line),"Daily: clock=%s day=%lu minute=%u enabled=%s position=%s slot=%u IR=%d armed=%s",clockSynced?"set":"unset",static_cast<unsigned long>(localDay()),unsigned(localMinute()),scheduleEnabled?"yes":"no",positionKnown?"known":"unknown",unsigned(currentSlot),int(irRaw),handArmed?"yes":"no");Serial.println(line);Serial.println(systemStatus(millis()));Serial.println(lastAction);Serial.println(irTestStatus(millis()));Serial.println(weekStatus());}
  public:
   void begin(){
     pinMode(RetiredServo,INPUT);pinMode(Step1,OUTPUT);pinMode(Step2,OUTPUT);pinMode(Step3,OUTPUT);pinMode(Step4,OUTPUT);writeCoils(0);
     pinMode(RetiredTrigger,INPUT);pinMode(IrPin,INPUT_PULLUP);pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
     loadSettings();WiFi.mode(WIFI_AP_STA);WiFi.setAutoReconnect(true);snprintf(apSsid,sizeof(apSsid),"PharmaVault-%012llX",static_cast<unsigned long long>(ESP.getEfuseMac()&0xFFFFFFFFFFFFULL));
-    const IPAddress ip(192,168,4,1),mask(255,255,255,0);apStarted=WiFi.softAPConfig(ip,ip,mask)&&WiFi.softAP(apSsid,accessPassword);msp.begin(accessPassword);startWeb();if(network.magic==NetworkMagic)WiFi.begin(network.ssid,network.password);printAccess();
+    const IPAddress ip(192,168,4,1),mask(255,255,255,0);apStarted=WiFi.softAPConfig(ip,ip,mask)&&WiFi.softAP(apSsid,accessPassword);if(apStarted)dns.start(53,"pharmavault",ip);if(MDNS.begin("pharmavault"))MDNS.addService("http","tcp",80);msp.begin(accessPassword);startWeb();if(network.magic==NetworkMagic)WiFi.begin(network.ssid,network.password);printAccess();
   }
   void run(){
     serviceClock(millis());pollUart();updateDeadlines();updateWeek();serviceTimerTest(millis());serviceProviderReport(millis());
     if(phase!=Phase::Idle){runMotion();delay(1);return;}
     pollIr(millis());servicePillboxSensors(millis());
     if(networkQueued){networkQueued=false;WiFi.disconnect(false,false);WiFi.begin(network.ssid,network.password);}
-    const bool connected=WiFi.status()==WL_CONNECTED;if(connected&&!wasConnected){Serial.print("Same-Wi-Fi dashboard: http://");Serial.println(WiFi.localIP());}wasConnected=connected;
+    const bool connected=WiFi.status()==WL_CONNECTED;if(connected&&!wasConnected){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}wasConnected=connected;
     if(Serial.available()){const int c=Serial.read();if(c=='?')printAccess();else if(c=='i'||c=='I'||c=='n'||c=='N'||c=='u'||c=='U')printDiagnostics();}
     web.handleClient();serviceClock(millis());serviceDaily(millis());serviceHand(millis());delay(1);
   }

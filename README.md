@@ -31,7 +31,9 @@ The detailed guides are the `.txt` files in the root: `START_HERE.txt`, `FRESH_P
 | --- | --- |
 | Pillbox Wi-Fi name | `PharmaVault-` + 12 hex digits from the chip (printed on the serial monitor) |
 | Pillbox Wi-Fi password | `PharmaVault67` |
-| Dashboard | http://192.168.4.1 |
+| Dashboard | http://pharmavault (or http://192.168.4.1) |
+| Dashboard on your home Wi-Fi | http://pharmavault.local |
+| Devices at once | 4 on the pillbox Wi-Fi, including the FireBeetle bridge |
 | Dashboard login | username `demo`, password `PharmaVault67` |
 
 The password is set in `loadSettings()` in `PharmaVault_PBesp.ino`. To change it, edit that one string (8 to 32 characters, no spaces), upload again, and re-pair the FireBeetle with the new password.
@@ -104,7 +106,7 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 ## 5. Set up the dispenser
 
 1. Connect the laptop to the `PharmaVault-...` Wi-Fi (password `PharmaVault67`). Windows may say "No Internet"; stay connected.
-2. Open **http://192.168.4.1** (http, not https) and log in as `demo` / `PharmaVault67`.
+2. Open **http://pharmavault** (type the `http://`, or the browser may search for it instead). If that fails, use http://192.168.4.1 and log in as `demo` / `PharmaVault67`.
 3. Sync the clock and set the daily dose time.
 4. Confirm the carousel's current compartment. Slot 8 is the empty parking position.
 5. Load the seven compartments, record the new pack, and type the Day 1 to Day 7 refill instructions.
@@ -127,7 +129,7 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 | Problem | Check |
 | --- | --- |
 | No COM port | Use a data USB cable and check Device Manager > Ports for the USB chip. |
-| Dashboard won't load | Laptop on the `PharmaVault-...` Wi-Fi with automatic IP, using `http://192.168.4.1`. |
+| Dashboard won't load | Laptop on the `PharmaVault-...` Wi-Fi with automatic IP, using `http://pharmavault` or `http://192.168.4.1`. Turn off mobile data so the phone asks the pillbox for the name. |
 | `BRIDGE OFFLINE` | FireBeetle powered, paired with the right Wi-Fi name, and password `PharmaVault67`. |
 | MSP LCD shows stale data | FireBeetle link down, or the MSP430 stopped at `main` in the debugger (press Resume). |
 | Board resets while the motor turns | The USB supply is too weak for the motor. Use a better cable or port. |
