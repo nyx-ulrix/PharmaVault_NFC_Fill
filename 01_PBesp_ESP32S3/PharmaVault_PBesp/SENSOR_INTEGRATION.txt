@@ -14,7 +14,7 @@ API
     if (sensors.sample(millis(), canBlock)) { ...copy readings...; invalidateIr(); }
   Public fields: temperatureX100, rhX100, dhtDiagnosticX100, ntcMillivolts,
     flags, sampledAt, hasSample.
-  flags: bit0 temperature outside20..30C; bit1 RH>60%; bit2 invalid sensor.
+  flags: bit0 temperature outside20..30C; bit1 RH above the Settings limit (default 95%); bit2 invalid sensor.
   Invalid main temperature=-32768; invalid humidity=65535, as existing protocol.
   fresh(now) is false after16s. due(now) first becomes true2s after begin and
   then5s after the preceding transaction. No ADC/DHT read occurs if canBlock=false.

@@ -23,6 +23,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <esp_system.h>
 #include <WiFi.h>
 #include <Preferences.h>
 #include <esp_random.h>
@@ -207,7 +208,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .workspace{padding-top:14px;padding-bottom:120px}
 .global-notice:empty,.message:empty{display:none}
 .global-notice{background:var(--accent-soft);color:var(--ink)}.global-notice,.alert{padding:13px 18px;border-radius:16px;margin-bottom:12px;font-size:.88rem}
-.alert{background:var(--warn-bg);color:var(--warn-ink)}.error{background:var(--err-bg);color:var(--err-ink)}
+.alert{background:var(--warn-bg);color:var(--warn-ink)}.error{background:var(--err-bg);color:var(--err-ink)}.env-alert{background:var(--err-bg);color:var(--err-ink);font-weight:700;font-size:.98rem;padding:14px 14px 14px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px}.env-alert button{flex-shrink:0;background:var(--err-ink);color:#fff}
 .test-notice{display:flex;gap:16px;align-items:center;justify-content:space-between;background:var(--cta);color:var(--cta-ink);border-radius:28px;padding:14px 16px 14px 22px;margin-bottom:16px}
 .test-notice p{margin:0;font-size:.86rem}.test-notice button{flex-shrink:0;background:var(--cta-ink);color:var(--cta)}
 .intro{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin:18px 0 24px}
@@ -268,7 +269,7 @@ input[type=text],input[type=password],input[type=time]{display:block;width:100%;
 .group-title{margin:34px 0 4px;font-size:1.4rem;font-weight:800;letter-spacing:-.03em}.group-note{margin-bottom:16px}
 #alignmentSection{align-self:start}
 @media(max-width:760px){.shell{padding-left:16px;padding-right:16px}.grid{grid-template-columns:1fr}.cards{grid-template-columns:1fr;gap:12px}.stat strong{font-size:1.9rem}.env-pair strong{font-size:1.5rem}.panel{padding:22px;border-radius:24px}.intro{flex-direction:column;align-items:flex-start;gap:10px;margin-top:10px}.nav button{min-width:118px}.footer{flex-direction:column;gap:3px}.brand small{display:none}.hero{min-height:0}.mascot{position:static!important;height:170px;align-self:center;margin:-4px 0 2px}.hero-copy{max-width:none}.week-dots{gap:6px}}
-@media(max-width:440px){.toprow:has(.nav-note:not([hidden])) .brand>div{display:none}.nav-note,.connection{padding:8px 12px}}@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+@media(max-width:440px){.env-alert{flex-direction:column;align-items:flex-start}.toprow:has(.nav-note:not([hidden])) .brand>div{display:none}.nav-note,.connection{padding:8px 12px}}@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style></head><body>
 <header class="topbar"><div class="shell"><div class="toprow"><div class="brand"><span class="brand-mark" aria-hidden="true">PV</span><div>PharmaVault<small>A little care. Every day.</small></div></div><div class="top-status"><span id="refillDot" class="nav-note" hidden>Refill due</span><span id="testDot" class="nav-note" hidden>Test on</span><span id="connectionState" class="connection" role="status">Connecting</span></div></div>
 </div></header>
@@ -276,7 +277,7 @@ input[type=text],input[type=password],input[type=time]{display:block;width:100%;
 <main class="shell workspace">
 <div id="connectionNotice" class="global-notice error" role="alert" hidden></div><p id="bridgeStatus" class="global-notice" role="status">Checking healthcare-station link...</p><p id="motionNotice" class="global-notice" role="status" hidden></p><p id="storage" class="global-notice error" role="alert"></p>
 <div id="globalTest" class="test-notice" hidden><p id="irTestBanner" role="alert" hidden></p><button id="quickStopTest" type="button" disabled>Stop test</button></div>
-<p id="overdueAlert" class="alert" role="alert" hidden></p><p id="weekRefillAlert" class="alert" role="alert" hidden></p><p id="globalActionMessage" class="message" role="status"></p>
+<div id="envAlert" class="alert env-alert" role="alert" hidden><span id="envAlertText"></span><button id="envAck" type="button">Got it</button></div><p id="overdueAlert" class="alert" role="alert" hidden></p><p id="weekRefillAlert" class="alert" role="alert" hidden></p><p id="globalActionMessage" class="message" role="status"></p>
 
 <div id="viewToday" role="tabpanel" aria-labelledby="navToday">
 <div class="intro"><div><p class="eyebrow" id="overviewDate">YOUR DAILY OVERVIEW</p><h1>Welcome back.</h1><p>Here's your pillbox today.</p></div><span id="modeBadge" class="badge">Connecting</span></div>
@@ -303,7 +304,7 @@ input[type=text],input[type=password],input[type=time]{display:block;width:100%;
 
 <div id="viewSettings" role="tabpanel" aria-labelledby="navSettings" hidden>
 <div class="intro"><div><h1>Settings</h1><p>Pause the schedule before changing settings or handling the carousel.</p></div><span class="badge">Singapore, UTC+8</span></div>
-<nav class="jump" aria-label="Settings sections"><a href="#scheduleSection">Clock &amp; timer</a><a href="#alignmentSection">Carousel</a><a href="#irTestPanel">Test mode</a><a href="#wifiSection">Wi-Fi</a></nav>
+<nav class="jump" aria-label="Settings sections"><a href="#scheduleSection">Clock &amp; timer</a><a href="#alignmentSection">Carousel</a><a href="#irTestPanel">Test mode</a><a href="#limitsSection">Limits</a><a href="#wifiSection">Wi-Fi</a></nav>
 
 <div class="grid"><section class="panel section-anchor" id="scheduleSection"><h2>Clock &amp; daily timer</h2><p id="clockStatus" class="status" role="status"></p><button id="syncClock" type="button" class="ghost" disabled>Sync clock from this device</button><p id="clockMessage" class="message" role="status"></p><div class="field-grid"><label>Dose ready at<input id="scheduleTime" type="time" value="13:00" required></label><label>Overdue alert at<input id="deadlineTime" type="time" value="14:00" required></label></div><small>The alert must be later the same day. Times repeat every day.</small><label class="check"><input id="scheduleConfirm" type="checkbox"><span>I checked the date, times, carousel position and hand sensor.</span></label><div class="row" style="margin-top:14px"><button id="saveSchedule" type="button" class="secondary" disabled>Save times</button><button id="enableSchedule" type="button" disabled>Enable schedule</button><button id="pauseSchedule" type="button" class="ghost" disabled>Pause schedule</button></div><p id="scheduleStatus" class="quiet" style="margin-top:16px"></p><p id="scheduleMessage" class="message" role="status"></p><details><summary>After a restart or a missed day</summary><p>After a restart, sync the clock, confirm the carousel position, then enable. Times and past doses stay saved.</p><p>If a day was missed, remove its medicine before aligning the compartment before today's. Don't rotate past a loaded missed compartment.</p><p>At the dose time the dose becomes ready without moving. A fresh hand turns the motor. An overdue dose stays available until midnight. A failed attempt never retries by itself.</p></details></section>
 
@@ -315,7 +316,7 @@ input[type=text],input[type=password],input[type=time]{display:block;width:100%;
 <section id="timerTestPanel" class="panel"><h2>Timer and overdue test</h2><p class="quiet">A quick run of the daily timing: ready after 10 s, overdue after 30 s. It doesn't change saved times or the week. Tick the confirmation in the hand test first.</p><div class="field-grid"><p>Ready in<br><strong id="timerTestReady">Not started</strong></p><p>Overdue in<br><strong id="timerTestDeadline">Not started</strong></p></div><p id="timerTestStatus" class="status" role="status"></p><p id="timerTestAlert" class="overdue" role="alert" hidden></p><button id="startTimerTest" type="button" disabled>Start timer test</button><p id="timerTestMessage" class="message" role="status"></p><small>Use Stop test mode to finish. Test results are kept apart from the daily history.</small></section></div>
 <section id="irDetails" class="panel full-row"><h2>Hand sensor</h2><p id="irStatus" class="quiet" role="status"></p><details><summary>Sensor diagnostics and wiring</summary><p id="irDiagnostic" class="quiet"></p><p>IR VCC → 3.3 V, GND → ground, OUT → GPIO14. LOW means hand, HIGH means clear.</p><small>If it always detects a hand, turn the sensitivity screw or re-aim the sensor.</small></details></section>
 
-<section id="wifiSection" class="panel full-row section-anchor"><h2>Wi-Fi</h2><p id="networkStatus" class="quiet"></p><details><summary>Join another network</summary><form id="wifiForm"><label>Wi-Fi name<input id="ssid" type="text" maxlength="32" autocomplete="off" required></label><label>Password<input id="wifiPassword" type="password" maxlength="63" autocomplete="new-password"></label><small>2.4 GHz home network. The PharmaVault Wi-Fi stays on as well.</small><button id="joinWifi" disabled style="margin-top:14px">Save &amp; connect</button></form><p id="wifiMessage" class="message" role="status"></p></details></section>
+<section id="limitsSection" class="panel full-row section-anchor"><h2>Storage limits</h2><p class="quiet">The dashboard alerts you when the pillbox is colder than 20 °C, warmer than 30 °C, or more humid than this limit.</p><label>Humidity alert above (%)<input id="rhMaxInput" type="number" min="30" max="99" step="1" value="95"></label><button id="saveLimits" type="button" class="secondary" disabled>Save limit</button><p id="limitsMessage" class="message" role="status"></p></section><section id="wifiSection" class="panel full-row section-anchor"><h2>Wi-Fi</h2><p id="networkStatus" class="quiet"></p><button id="forgetWifi" type="button" class="ghost" hidden>Forget saved network</button><details><summary>Join another network</summary><form id="wifiForm"><label>Wi-Fi name<input id="ssid" type="text" maxlength="32" autocomplete="off" required></label><label>Password<input id="wifiPassword" type="password" maxlength="63" autocomplete="new-password"></label><small>2.4 GHz home network. The PharmaVault Wi-Fi stays on as well.</small><button id="joinWifi" disabled style="margin-top:14px">Save &amp; connect</button></form><p id="wifiMessage" class="message" role="status"></p></details></section>
 </div>
 <footer class="footer"><span>PharmaVault · Seven days of care</span><span>Motor moves are logged. Pill pickup is not measured.</span></footer>
 </main><script>
@@ -552,6 +553,7 @@ async function refresh() {
       el('alignmentStatus').textContent=state.positionKnown?'Current aligned/last released compartment: '+state.currentSlot+'. Next physical step reaches compartment '+(state.currentSlot%8+1)+'. Calendar-day eligibility is checked separately; no loaded missed compartment is skipped automatically.':
         pending?'Position unknown. Pause, manually remove any missed medicine, and visually confirm the preceding compartment '+preceding+' to release today’s day-specific compartment '+state.today.slot+'. Do not rotate past a loaded missed compartment.':'Position unknown. With the schedule paused, manually remove missed medicine and verify the current compartment. A new week must start at empty parking compartment 8.';
       el('networkStatus').textContent=state.lanIp?'On your home Wi-Fi: http://pharmavault.local or http://'+state.lanIp+'. On the PharmaVault Wi-Fi: http://pharmavault':'On the PharmaVault Wi-Fi: http://pharmavault (or http://192.168.4.1)';
+      el('networkStatus').textContent+=state.homeSsid&&!state.lanIp?'. Saved home network "'+state.homeSsid+'" is out of range; the pillbox retries every 2 minutes.':'';el('forgetWifi').hidden=!state.homeSsid;
       el('bridgeStatus').textContent=state.bridgeOnline===true?'Healthcare station connected: pillbox readings/status are sent to the MSP430.':'Healthcare station disconnected. Pillbox sensors and dispensing continue locally.';
 
       renderIr();renderToday();renderIrTest();renderWeek();renderRefillInstructions();
@@ -650,6 +652,38 @@ function showView(name,section='',focusTab=false) {
     el(section).scrollIntoView({block:'start',behavior:'auto'});
   }
 }
+let envAlerted=0,envAcked=0,audioCtx=null;
+const ChimeEveryMs=6000;
+function chime(){
+  // Soft sine chime with a gentle attack and fade, so it never clicks or blares.
+  try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type='sine';o.frequency.setValueAtTime(660,t);o.frequency.setValueAtTime(880,t+.18);
+    g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.035,t+.04);g.gain.exponentialRampToValueAtTime(0.0001,t+.6);
+    o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+.62);}catch(e){}
+}
+document.addEventListener('pointerdown',()=>{try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();audioCtx.resume();}catch(e){}},{once:true});
+setInterval(()=>{if(envAlerted&&envAlerted!==envAcked)chime();},ChimeEveryMs);
+function renderEnvAlert(){
+  const live=connected&&state!==null,f=live?Number(state.envFlags)||0:0,t=live?state.temp:null,h=live?state.rh:null;
+  const hot=Boolean(f&1)&&t!==null&&t>state.tempMax,cold=Boolean(f&1)&&!hot&&t!==null,humid=Boolean(f&2)&&h!==null,msgs=[];
+  const c=v=>String(Math.round(v/10)/10);
+  if(hot)msgs.push('Too hot: '+c(t)+' °C.');if(cold)msgs.push('Too cold: '+c(t)+' °C.');
+  if(hot||cold)msgs.push('Keep the medicine at '+c(state.tempMin)+' to '+c(state.tempMax)+' °C.');
+  if(humid)msgs.push('Too humid: '+c(h)+' %. Keep it at or below '+c(state.rhMax)+' %.');
+  const key=(hot?1:0)|(cold?2:0)|(humid?4:0);
+  if(key&&key!==envAlerted){envAcked=0;try{if(navigator.vibrate)navigator.vibrate([250,120,250]);}catch(e){}chime();}
+  envAlerted=key;
+  el('envAlert').hidden=!msgs.length;
+  el('envAlertText').textContent=msgs.length?'Storage alert. '+msgs.join(' ')+' Move the pillbox somewhere cooler and drier.'+(key===envAcked?' Sound off.':''):'';
+  el('envAck').hidden=!key||key===envAcked;
+  document.title=key?'Storage alert: PharmaVault':'PharmaVault · Daily care';
+  const rhIn=el('rhMaxInput');if(live&&!rhIn.dataset.dirty&&document.activeElement!==rhIn)rhIn.value=Math.round(state.rhMax/100);
+  const pct=Number(rhIn.value);el('saveLimits').disabled=!live||!token||busy||!Number.isInteger(pct)||pct<30||pct>99;
+}
+el('envAck').addEventListener('click',()=>{envAcked=envAlerted;renderEnvAlert();});
+el('rhMaxInput').addEventListener('input',()=>{el('rhMaxInput').dataset.dirty='1';renderEnvAlert();});
+el('saveLimits').addEventListener('click',()=>{if(el('saveLimits').disabled)return;post('/limits',{rhMax:el('rhMaxInput').value},'limitsMessage');delete el('rhMaxInput').dataset.dirty;});
 function renderOverview() {
   const live=connected&&state!==null;
   el('connectionState').textContent=live?'Dispenser connected':connectionFailed?'Connection lost':'Connecting';
@@ -732,7 +766,7 @@ function renderOverview() {
     if(localDay<state.weekStartDay)detail='Your seven-day pack starts '+dayText(state.weekStartDay)+' at '+timeInput(state.dueMinute)+'. No action needed until then.';
   }
   el('heroTitle').textContent=title;el('todayDetail').textContent=detail;
-  el('nextAction').hidden=!action;el('nextAction').textContent=action;
+  el('nextAction').hidden=!action;el('nextAction').textContent=action;renderEnvAlert();
 }
 viewNames.forEach((name,index)=>{
   el('nav'+name).addEventListener('click',()=>showView(name));
@@ -749,6 +783,7 @@ el('nextAction').addEventListener('click',()=>{if(!el('nextAction').disabled)sho
 el('quickPause').addEventListener('click',()=>{
   if(!el('quickPause').disabled)post('/schedule/mode',{enabled:'0'},'globalActionMessage');
 });
+el('forgetWifi').addEventListener('click',()=>{if(!el('forgetWifi').disabled&&confirm('Forget the saved home network? The pillbox keeps its own PharmaVault Wi-Fi.'))post('/wifi/forget',{},'wifiMessage');});
 el('quickStopTest').addEventListener('click',()=>{
   if(!el('quickStopTest').disabled)post('/test/mode',{enabled:'0'},'globalActionMessage');
 });
@@ -789,7 +824,7 @@ class PharmaVault {
   // Day labels are historical snapshots; old firmware history remains readable.
   struct DailyRecord {uint32_t day,preparedAt,completedAt;uint8_t slot,state,overdue,reserved;char label[17];uint8_t padding[3];};
   struct DailyJournal {uint32_t magic,maxDay;DailyRecord records[SlotCount];};
-  WebServer web{80};DNSServer dns;PvWirelessSerial msp;Preferences prefs;
+  static constexpr uint32_t StaRetryMs=120000;uint32_t staRetryAt=0;WebServer web{80};DNSServer dns;PvWirelessSerial msp;Preferences prefs;
   NetworkSettings network{};WeekSettings week{};
   char statusChunk[2200]{}; // Reused on the main loop; keep large status buffers off its stack.
   static constexpr uint32_t RefillTextMagic=0x50564D31;
@@ -1011,7 +1046,7 @@ class PharmaVault {
   void loadSettings(){
     storageOk=prefs.begin("pharmavault",false);strcpy(accessPassword,"PharmaVault67");  // fixed AP and dashboard password
     if(!storageOk)return;
-    if(prefs.getBytesLength("network")==sizeof(network))prefs.getBytes("network",&network,sizeof(network));
+    if(prefs.getBytesLength("network")==sizeof(network))prefs.getBytes("network",&network,sizeof(network));{const uint16_t rh=prefs.getUShort("rhmax",PvPillboxSensors::DefaultMaxHumidity);if(rh>=3000&&rh<=9900)sensors.maxHumidity=rh;}
     if(network.magic!=NetworkMagic||!memchr(network.ssid,0,sizeof(network.ssid))||!memchr(network.password,0,sizeof(network.password))||!network.ssid[0]||strlen(network.password)>63||(network.password[0]&&strlen(network.password)<8))network=NetworkSettings{};
     // Ignore former hand1/hold1 preferences: direct LOW detection and 1500ms are fixed.
     if(prefs.getBytesLength("stepper1")==sizeof(stepper))prefs.getBytes("stepper1",&stepper,sizeof(stepper));
@@ -1317,7 +1352,7 @@ class PharmaVault {
       "\"handArmed\":%s,\"handStatus\":\"%s\",\"nfcStatus\":\"%s\",\"nfcLastAction\":\"%s\",",
       raw,stable?"true":"false",age,static_cast<unsigned long>(irHasSample?now-irCandidateAt:0),unsigned(IrHandLevel),stable?(irRaw==IrHandLevel?"true":"false"):"null",
       irStatus(now),handArmed?"true":"false",handStatus(now),nfcStatus(now),nfcLastAction);json+=statusChunk;
-    json+="\"refillInstructions\":[";
+    snprintf(statusChunk,sizeof(statusChunk),"\"envFlags\":%u,\"tempMin\":%ld,\"tempMax\":%ld,\"rhMax\":%u,",unsigned(envFresh?environmentFlags:4),long(PvPillboxSensors::MinDemoTemperature),long(PvPillboxSensors::MaxDemoTemperature),unsigned(sensors.maxHumidity));json+=statusChunk;json+="\"homeSsid\":";appendQuoted(json,network.magic==NetworkMagic?network.ssid:"");json+=",";json+="\"refillInstructions\":[";
     for(uint8_t i=0;i<7;++i){if(i)json+=',';appendQuoted(json,refillText.text[i]);}
     json+="],\"today\":";appendRecord(json,recordFor(localDay()),localDay());json+=",\"history\":[";
     bool comma=false;for(uint8_t i=0;i<8;++i)if(journal.records[i].day){if(comma)json+=',';appendRecord(json,&journal.records[i],0);comma=true;}
@@ -1405,6 +1440,8 @@ class PharmaVault {
     lastAction="All seven days recorded; empty compartment 8 confirmed. Daily timer enabled with the same saved times. No NFC tap needed.";
     web.send(200,"text/plain",lastAction);
   }
+  void saveLimits(){if(!authorize())return;noCache();uint16_t pct=0;if(!pv_u16(web.arg("rhMax").c_str(),&pct)||pct<30||pct>99){web.send(400,"text/plain","Use a humidity limit from 30 to 99 %.");return;}if(!consumeToken())return;if(!storageOk||prefs.putUShort("rhmax",uint16_t(pct*100))!=2){requireStorage();return;}sensors.maxHumidity=uint16_t(pct*100);web.send(200,"text/plain","Humidity limit saved. Alerts now start above "+String(pct)+" %.");}
+  void forgetWifi(){if(!authorize())return;noCache();if(!consumeToken())return;network=NetworkSettings{};if(storageOk)prefs.remove("network");WiFi.disconnect(false,true);web.send(200,"text/plain","Home network forgotten. The pillbox now uses only its own PharmaVault Wi-Fi.");}
   void saveWifi(){
     if(!authorize())return;noCache();if(!requireStorage())return;const String ssid=web.arg("ssid"),password=web.arg("password");
     if(ssid.length()<1||ssid.length()>32||password.length()>63||(password.length()&&password.length()<8)||strlen(ssid.c_str())!=ssid.length()||strlen(password.c_str())!=password.length()){web.send(400,"text/plain","Use a valid personal 2.4 GHz network name and password.");return;}
@@ -1416,24 +1453,26 @@ class PharmaVault {
     web.on("/test/mode",HTTP_POST,[this]{setIrTestMode();});
     web.on("/clock",HTTP_POST,[this]{setClock();});web.on("/schedule/save",HTTP_POST,[this]{saveSchedule();});web.on("/schedule/mode",HTTP_POST,[this]{setScheduleMode();});
     web.on("/stepper/save",HTTP_POST,[this]{saveStepper();});web.on("/stepper/jog",HTTP_POST,[this]{jogStepper();});web.on("/stepper/align",HTTP_POST,[this]{alignStepper();});
-    web.on("/refill/instructions",HTTP_POST,[this]{saveRefillInstructions();});web.on("/week/refill",HTTP_POST,[this]{refillWeek();});web.on("/wifi",HTTP_POST,[this]{saveWifi();});
+    web.on("/refill/instructions",HTTP_POST,[this]{saveRefillInstructions();});web.on("/week/refill",HTTP_POST,[this]{refillWeek();});web.on("/wifi",HTTP_POST,[this]{saveWifi();});web.on("/wifi/forget",HTTP_POST,[this]{forgetWifi();});web.on("/limits",HTTP_POST,[this]{saveLimits();});
     web.onNotFound([this]{if(!authorize())return;noCache();web.send(404,"text/plain","Not found");});web.begin();
   }
-  void printAccess(){Serial.println();Serial.println("PHARMAVAULT PBesp wireless 2 (local sensors)");Serial.println("ULN2003 IN1/2/3/4 = GPIO5/6/7/8; GPIO3 unused; IR OUT=GPIO14 at3.3V, LOW=hand, hold=1500ms.");Serial.println("Sensor link: FireBeetle wireless bridge on TCP 4210; S3 GPIO4/17 unused.");Serial.print("Wi-Fi name: ");Serial.println(apSsid);Serial.print("Wi-Fi password: ");Serial.println(accessPassword);Serial.println("Dashboard: http://pharmavault (or http://192.168.4.1)");Serial.println("Dashboard username: demo");Serial.print("Dashboard password: ");Serial.println(accessPassword);if(WiFi.status()==WL_CONNECTED){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}}
+  void printAccess(){Serial.println();Serial.println("PHARMAVAULT PBesp wireless 2 (local sensors)");Serial.println("ULN2003 IN1/2/3/4 = GPIO5/6/7/8; GPIO3 unused; IR OUT=GPIO14 at3.3V, LOW=hand, hold=1500ms.");Serial.println("Sensor link: FireBeetle wireless bridge on TCP 4210; S3 GPIO4/17 unused.");Serial.print("Wi-Fi name: ");Serial.println(apSsid);Serial.print("Wi-Fi password: ");Serial.println(accessPassword);Serial.println("Dashboard: http://pharmavault (or http://192.168.4.1)");Serial.println("Dashboard username: demo");Serial.print("Dashboard password: ");Serial.println(accessPassword);Serial.printf("Wi-Fi diag: channel=%u clients=%u/4 home network=%s (%s) uptime=%lus last reset=%d\n",unsigned(WiFi.channel()),unsigned(WiFi.softAPgetStationNum()),network.magic==NetworkMagic?network.ssid:"none saved",WiFi.status()==WL_CONNECTED?"connected":"not connected",static_cast<unsigned long>(millis()/1000),int(esp_reset_reason()));if(WiFi.status()==WL_CONNECTED){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}}
   void printDiagnostics(){char line[260];snprintf(line,sizeof(line),"Daily: clock=%s day=%lu minute=%u enabled=%s position=%s slot=%u IR=%d armed=%s",clockSynced?"set":"unset",static_cast<unsigned long>(localDay()),unsigned(localMinute()),scheduleEnabled?"yes":"no",positionKnown?"known":"unknown",unsigned(currentSlot),int(irRaw),handArmed?"yes":"no");Serial.println(line);Serial.println(systemStatus(millis()));Serial.println(lastAction);Serial.println(irTestStatus(millis()));Serial.println(weekStatus());}
  public:
   void begin(){
     pinMode(RetiredServo,INPUT);pinMode(Step1,OUTPUT);pinMode(Step2,OUTPUT);pinMode(Step3,OUTPUT);pinMode(Step4,OUTPUT);writeCoils(0);
     pinMode(RetiredTrigger,INPUT);pinMode(IrPin,INPUT_PULLUP);pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
-    loadSettings();WiFi.mode(WIFI_AP_STA);WiFi.setSleep(false);WiFi.setAutoReconnect(true);snprintf(apSsid,sizeof(apSsid),"PharmaVault-%012llX",static_cast<unsigned long long>(ESP.getEfuseMac()&0xFFFFFFFFFFFFULL));
+    loadSettings();WiFi.onEvent([](arduino_event_id_t e,arduino_event_info_t info){if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)Serial.printf("WIFI client joined (aid %u)\n",unsigned(info.wifi_ap_staconnected.aid));else if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED)Serial.printf("WIFI client left (aid %u, reason %u)\n",unsigned(info.wifi_ap_stadisconnected.aid),unsigned(info.wifi_ap_stadisconnected.reason));else if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)Serial.printf("WIFI home network lost (reason %u)\n",unsigned(info.wifi_sta_disconnected.reason));else if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP)Serial.println("WIFI home network connected");});WiFi.mode(WIFI_AP_STA);WiFi.setSleep(false);WiFi.setAutoReconnect(false);snprintf(apSsid,sizeof(apSsid),"PharmaVault-%012llX",static_cast<unsigned long long>(ESP.getEfuseMac()&0xFFFFFFFFFFFFULL));
     const IPAddress ip(192,168,4,1),mask(255,255,255,0);apStarted=WiFi.softAPConfig(ip,ip,mask,IPAddress(uint32_t(0)),ip)&&WiFi.softAP(apSsid,accessPassword);if(apStarted)dns.start(53,"pharmavault",ip);if(MDNS.begin("pharmavault"))MDNS.addService("http","tcp",80);msp.begin(accessPassword);startWeb();if(network.magic==NetworkMagic)WiFi.begin(network.ssid,network.password);printAccess();
   }
   void run(){
     serviceClock(millis());pollUart();updateDeadlines();updateWeek();serviceTimerTest(millis());serviceProviderReport(millis());
     if(phase!=Phase::Idle){runMotion();delay(1);return;}
     pollIr(millis());servicePillboxSensors(millis());
-    if(networkQueued){networkQueued=false;WiFi.disconnect(false,false);WiFi.begin(network.ssid,network.password);}
+    if(networkQueued){networkQueued=false;staRetryAt=millis();WiFi.disconnect(false,false);WiFi.begin(network.ssid,network.password);}
     const bool connected=WiFi.status()==WL_CONNECTED;if(connected&&!wasConnected){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}wasConnected=connected;
+    // ponytail: one home-network attempt every 2 min; each attempt scans channels and briefly moves the PharmaVault AP.
+    if(network.magic==NetworkMagic&&!connected&&millis()-staRetryAt>=StaRetryMs){staRetryAt=millis();WiFi.begin(network.ssid,network.password);}
     if(Serial.available()){const int c=Serial.read();if(c=='?')printAccess();else if(c=='i'||c=='I'||c=='n'||c=='N'||c=='u'||c=='U')printDiagnostics();}
     web.handleClient();serviceClock(millis());serviceDaily(millis());serviceHand(millis());delay(1);
   }

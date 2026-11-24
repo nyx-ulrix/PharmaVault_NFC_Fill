@@ -96,6 +96,8 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 
 **Bridge:** open `02_ESPmsp_FireBeetle/PharmaVault_ESPmsp/PharmaVault_ESPmsp.ino` and choose board **FireBeetle 2 ESP32-E** (`esp32:esp32:dfrobot_firebeetle2_esp32e`). Upload, then open the Serial Monitor at 115200 baud with line ending **Newline**. Expect `PHARMAVAULT wireless bridge 1`.
 
+**MSP430 without CCS:** `Firmware/PharmaVault_Healthcare_MSP430_gcc.hex` is built from the current source with TI's MSP430-GCC 9.3.1. Flash it with TI's MSP Flasher: `MSP430Flasher.exe -n MSP430F5529 -w PharmaVault_Healthcare_MSP430_gcc.hex -v -e ERASE_MAIN -z [RESET,VCC]`. The older `.out`/`.hex` are the original CCS build.
+
 **MSP430:** in CCS, use File > Import Projects and pick `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430` (import it once). Build it, then Run > Debug and press **Resume**. You can also load the prebuilt `.out` from `Firmware/` instead of building. Its console runs at 9600 baud and should show `PHARMAVAULT healthcare MSP430 ready (wireless provider 1)`.
 
 ## 4. Pair the bridge (once)

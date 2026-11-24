@@ -17,7 +17,7 @@ class PvPillboxSensors {
   static constexpr int32_t InvalidTemperature=-32768;
   static constexpr uint16_t InvalidHumidity=65535;
   static constexpr int32_t MinDemoTemperature=2000,MaxDemoTemperature=3000;
-  static constexpr uint16_t MaxDemoHumidity=6000;
+  static constexpr uint16_t DefaultMaxHumidity=9500;  // %RH x100; user-adjustable in Settings
   // Conversion assumes the divider's 3V3 supply is nominally 3300mV.
   // Use calibrated ADC millivolts, not raw/4095 as a supply-voltage ratio.
   static constexpr float SupplyMillivolts=3300.0f,FixedOhms=10000.0f;
@@ -27,6 +27,7 @@ class PvPillboxSensors {
   uint16_t rhX100=InvalidHumidity;
   int32_t dhtDiagnosticX100=InvalidTemperature;
   uint16_t ntcMillivolts=0;
+  uint16_t maxHumidity=DefaultMaxHumidity;
   uint8_t flags=4; // bit0 temperature warning; bit1 RH warning; bit2 sensor fault.
   uint32_t sampledAt=0;
   bool hasSample=false;
@@ -77,7 +78,7 @@ class PvPillboxSensors {
     flags=0;
     if(temperatureX100==InvalidTemperature||rhX100==InvalidHumidity)flags|=4;
     if(temperatureX100!=InvalidTemperature&&(temperatureX100<MinDemoTemperature||temperatureX100>MaxDemoTemperature))flags|=1;
-    if(rhX100!=InvalidHumidity&&rhX100>MaxDemoHumidity)flags|=2;
+    if(rhX100!=InvalidHumidity&&rhX100>maxHumidity)flags|=2;
     sampledAt=lastAt_=millis();hasSample=true;
     return true;
   }

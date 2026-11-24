@@ -79,6 +79,9 @@ static char refill_text[7][49];
 static bool refill_fetch_active, refill_request_pending;
 static uint8_t refill_next_day, refill_page_day, refill_page_chunk;
 static bool idle_status_page;
+/* Last complete WEEK + Day 1..7 answer. Shown whenever a live tap lookup fails. RAM only. */
+static char cached_week[17], cached_text[7][49];
+static bool cache_valid;
 
 /* Configure nominal MCLK 4.194304 MHz, SMCLK 1.048576 MHz, ACLK 32.768 kHz. */
 static void clocks_init(void)
@@ -285,6 +288,24 @@ static void start_refill_lookup(void)
     refill_next_day = 1;
 }
 
+/* Page through the saved copy instead of an error. Live data replaces it when it arrives. */
+static void show_cached(const char *reason)
+{
+    cancel_refill_lookup();
+    if (!cache_valid) {
+        display("No saved info", reason, 250);
+        indicate(false);
+        return;
+    }
+    memcpy(refill_text, cached_text, sizeof refill_text);
+    refill_view_active = true;
+    refill_page_day = refill_page_chunk = 0;
+    refill_hold_until = tick_now() + REFILL_HOLD_TICKS;
+    display(cached_week, "Saved copy", 250);
+    indicate(true);
+    debug_write("NFC: live lookup unavailable, showing saved copy.\r\n");
+}
+
 static void service_refill(uint32_t now)
 {
     char day[3], second[17];
@@ -369,9 +390,8 @@ static bool expire_queued_tag(uint32_t now)
     finish_command();
     if (command_count && commands[command_head].kind == CMD_LOGREQ &&
         !strcmp(commands[command_head].arguments, uid)) finish_command();
-    display("Tap expired", "Remove and retap", 250);
-    indicate(false);
-    debug_write("NFC tap expired before transmission; remove and retap.\r\n");
+    debug_write("NFC tap expired before transmission.\r\n");
+    show_cached("Link busy");
     return true;
 }
 
@@ -388,12 +408,8 @@ static void service_transmit(uint32_t now)
     if (waiting_ack && !due(now, sent_tick + ACK_TIMEOUT)) return;
     command = &commands[command_head];
     if (attempts >= 3) {
-        if (command->kind == CMD_MED) {
-            cancel_refill_lookup();
-            display("Refill link error", "Remove and retap", 300);
-            indicate(false);
-            return;
-        }
+        if (command->kind == CMD_MED) { show_cached("No reply"); return; }
+        if (command->kind == CMD_TAG) { finish_command(); show_cached("No reply"); return; }
         display("ESP32 link error", "No reply", 250);
         indicate(false);
         finish_command();
@@ -487,12 +503,7 @@ static void receive_frame(char *line)
     if (count == 5 && !strcmp(fields[2], "ACK")) {
         const bool ok = !strcmp(fields[3], "OK");
         if (!ok && strcmp(fields[3], "ERR")) return;
-        if (command->kind == CMD_MED) {
-            cancel_refill_lookup();
-            display("Refill unavailable", "Remove and retap", 300);
-            indicate(false);
-            return;
-        }
+        if (command->kind == CMD_MED) { show_cached("Refill error"); return; }
         if (command->kind == CMD_TAG) {
             display(ok ? "Card recognized" : "Request rejected", fields[4], 260);
             indicate(ok);
@@ -513,6 +524,7 @@ static void receive_frame(char *line)
         else return;
         display(first, second, 200);
         indicate(true);
+        strcpy(cached_week, first);
         snprintf(debug_line, sizeof debug_line, "Week day %ld: %s\r\n", (long)slot, fields[4]);
         debug_write(debug_line);
         finish_command();
@@ -532,6 +544,8 @@ static void receive_frame(char *line)
         refill_request_pending = false;
         if (slot < 7) ++refill_next_day;
         else {
+            memcpy(cached_text, refill_text, sizeof cached_text);
+            cache_valid = true;
             refill_fetch_active = false;
             refill_view_active = true;
             refill_page_day = refill_page_chunk = 0;
@@ -587,12 +601,12 @@ static void report_card(const uint8_t *uid, uint8_t length)
     if (reader_resync_pending || command_count > COMMAND_CAPACITY - (held_uid[0] ? 2U : 1U)) {
         strcpy(held_uid, text);
         reader_resync_pending = true;
-        display("Link busy", "Remove and retap", 250);
-        indicate(false);
+        show_cached("Link busy");
         return;
     }
     if (held_uid[0]) enqueue(CMD_CLEAR, held_uid);
     strcpy(held_uid, text);
+    if (remote_warning_mask & 8) { show_cached("Pillbox offline"); return; }  /* No live link: saved copy only. */
     enqueue(CMD_TAG, text);       /* WEEK reply starts sequential MED1..7 lookups. */
     if (length <= 7) display("Reading card UID", text, 180);
     else {
@@ -679,7 +693,9 @@ static void service_remote(uint32_t now)
     if (status_fresh && box_refill) warnings |= 32;
     if (status_fresh && (!strcmp(box_state, "FAULT") || !strcmp(box_state, "ATTEMPTED"))) warnings |= 64;
     if (status_fresh && !strcmp(box_state, "TEST_OVERDUE")) warnings |= 128;
-    if ((warnings & (uint8_t)~remote_warning_mask) != 0) {
+    if ((warnings & 8) && !(remote_warning_mask & 8) && (refill_fetch_active || refill_view_active)) {
+        show_cached("Pillbox offline");   /* Link lost mid-tap: keep showing information. */
+    } else if ((warnings & (uint8_t)~remote_warning_mask) != 0) {
         cancel_refill_lookup();
         if (warnings & 8) display("PB data offline", "Check wireless", 300);
         else if (warnings & 4) display("PB sensor fault", "Check sensors", 300);
@@ -692,7 +708,6 @@ static void service_remote(uint32_t now)
     }
     if ((remote_warning_mask & 128) && !(warnings & 128)) lcd_hold_until = now;
     remote_warning_mask = warnings;
-    if ((warnings & 8) && (refill_fetch_active || refill_view_active)) cancel_refill_lookup();
 }
 
 
@@ -755,17 +770,26 @@ static void service_lcd(uint32_t now)
     display(first, second, 200);
 }
 
-/* Timer1 ISR: wake foreground jobs without local ADC or DHT sampling. */
+/* Timer1 ISR: wake foreground jobs without local ADC or DHT sampling.
+ * TI CCS uses the pragma form; TI's MSP430-GCC uses the attribute form. */
+#if defined(__TI_COMPILER_VERSION__)
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void scheduler_isr(void)
+#else
+void __attribute__((interrupt(TIMER1_A0_VECTOR))) scheduler_isr(void)
+#endif
 {
     ++ticks;
     __bic_SR_register_on_exit(LPM0_bits);
 }
 
 /* UART ISR: receive into the ring, or advance the active TX frame. */
+#if defined(__TI_COMPILER_VERSION__)
 #pragma vector=USCI_A0_VECTOR
 __interrupt void uart_isr(void)
+#else
+void __attribute__((interrupt(USCI_A0_VECTOR))) uart_isr(void)
+#endif
 {
     switch (__even_in_range(UCA0IV, USCI_UCTXIFG)) {
     case USCI_UCRXIFG: {

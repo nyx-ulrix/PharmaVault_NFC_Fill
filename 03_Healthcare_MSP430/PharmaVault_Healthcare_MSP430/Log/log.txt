@@ -1,0 +1,95 @@
+Tue Nov 24 17:38:20 2026:	* -----/|-------------------------------------------------------------------- *
+Tue Nov 24 17:38:20 2026:	*     / |__                                                                   *
+Tue Nov 24 17:38:20 2026:	*    /_   /   MSP Flasher v1.3.10                                             *
+Tue Nov 24 17:38:20 2026:	*      | /                                                                    *
+Tue Nov 24 17:38:20 2026:	* -----|/-------------------------------------------------------------------- *
+Tue Nov 24 17:38:20 2026:	*
+Tue Nov 24 17:38:20 2026:	* Evaluating triggers...done
+Tue Nov 24 17:38:20 2026:	
+Tue Nov 24 17:38:20 2026:	*******************************************************************************
+Tue Nov 24 17:38:20 2026:	Usage: MSP430Flasher [OPTIONS]                                                 
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -n DEVICE_NAME              (optional for MSP430, required for MSP432)        
+Tue Nov 24 17:38:20 2026:	                             specifies the name of the target MSP - prompt in  
+Tue Nov 24 17:38:20 2026:	                             case of mismatch                                  
+Tue Nov 24 17:38:20 2026:	                             Use -n NO_TARGET to run MSP Flasher without       
+Tue Nov 24 17:38:20 2026:	                             attempting a target connection (FET detection or  
+Tue Nov 24 17:38:20 2026:	                             FET firmware update only)                         
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -i (TI)USB | DETECT |       specifies the COM port of a connected debug tool  
+Tue Nov 24 17:38:20 2026:	    COMn (Win) |             (default: TIUSB/USB = first detected FET tool is  
+Tue Nov 24 17:38:20 2026:	    ttyACMn (Linux) |        used) For info on how to connect to specific eZ-  
+Tue Nov 24 17:38:20 2026:	    usbmodem* (OSX)          tools, see the MSP Flasher manual.                
+Tue Nov 24 17:38:20 2026:	                             Use -i DETECT  to execute a FET detection sweep,  
+Tue Nov 24 17:38:20 2026:	                             displaying detailed info about all connected debug
+Tue Nov 24 17:38:20 2026:	                             tools. User is prompted to pick a FET.            
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -j fast | medium | slow     sets FET speed for JTAG/SBW - only applicable for 
+Tue Nov 24 17:38:20 2026:	                             MSP-FET! Option will be ignored for all other FET 
+Tue Nov 24 17:38:20 2026:	                             tools. Default = medium.                          
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -a                          non-intrusive target connection: use this switch  
+Tue Nov 24 17:38:20 2026:	                             if no reset should be applied to the target device
+Tue Nov 24 17:38:20 2026:	                             on start-up. Correct target device name needs to  
+Tue Nov 24 17:38:20 2026:	                             be specified using the -n switch!                 
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -r [filenname,mem_sect]     specifies a memory section to read from and a file
+Tue Nov 24 17:38:20 2026:	                             to write to. mem_sect: RAM, INFO, MAIN, BSL or    
+Tue Nov 24 17:38:20 2026:	                             specific memory areas: 0x****-0x*****             
+Tue Nov 24 17:38:20 2026:	                             The file extension of 'filename' determines the   
+Tue Nov 24 17:38:20 2026:	                             data format: .txt = TI-TXT, .hex/.a43 = Intel-Hex 
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -w filenname                specifies a file for device programming. Supported
+Tue Nov 24 17:38:20 2026:	                             data formats: TI-TXT (.txt), Intel-Hex (.hex/.a43)
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -b                          unlocks BSL memory for writing                    
+Tue Nov 24 17:38:20 2026:	                             (use only with -w switch)                         
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -u                          unlocks InfoA memory for writing                  
+Tue Nov 24 17:38:20 2026:	                             (use only with -w switch)                         
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -e ERASE_ALL |              Erase memory. Default: ERASE_ALL (INFO&MAIN)      
+Tue Nov 24 17:38:20 2026:	    ERASE_MAIN |             ERASE_MAIN: erase MAIN memory only                
+Tue Nov 24 17:38:20 2026:	    ERASE_SEGMENT |          ERASE_SEGMENT: erase segment to be programmed only
+Tue Nov 24 17:38:20 2026:	    ERASE_TOTAL |            ERASE_TOTAL: applicable for FR5xx/FR6xx only!     
+Tue Nov 24 17:38:20 2026:	    ERASE_USER_CODE |        ERASE_USER_CODE: applicable for FR4xx only!       
+Tue Nov 24 17:38:20 2026:	    NO_ERASE                 NO_ERASE: use only with -w switch                 
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -v filename (optional)      triggers verification of the target memory against
+Tue Nov 24 17:38:20 2026:	                             a target code file. If -w is used, no argument is 
+Tue Nov 24 17:38:20 2026:	                             required. For a stand-alone verify, provide the   
+Tue Nov 24 17:38:20 2026:	                             path to a target code file as an argument.        
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -z [exit_spec,...]          specifies state of device on exit                 
+Tue Nov 24 17:38:20 2026:	                             (view available 'exit_spec's using -x switch)     
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -g                          switches log OFF (default: ON)                    
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -q                          triggers QUIET MODE (no system messages displayed)
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -d [breakpoint addresses]   specifies addresses for hardware breakpoints and  
+Tue Nov 24 17:38:20 2026:	                             triggers RUN_TO_BREAKPOINT mode                   
+Tue Nov 24 17:38:20 2026:	                             WARNING! This option is deprecated and will no    
+Tue Nov 24 17:38:20 2026:	                             longer be maintained. All breakpoint functionality
+Tue Nov 24 17:38:20 2026:	                             will be removed in a future version of MSP Flasher
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -t timeout_in_ms            specifies the breakpoint timeout (in milliseconds)
+Tue Nov 24 17:38:20 2026:	                             WARNING! This option is deprecated and will no    
+Tue Nov 24 17:38:20 2026:	                             longer be maintained. All breakpoint functionality
+Tue Nov 24 17:38:20 2026:	                             will be removed in a future version of MSP Flasher
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -p JTAG PASSWORD            specifies the JTAG password (hex format: 0x...).  
+Tue Nov 24 17:38:20 2026:	                             (if any, default: no password)                    
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -s                          suppresses the FET firmware update prompt         
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -o L | C                    specifies operation mode for L092 or RF430 devices
+Tue Nov 24 17:38:20 2026:	                             (L = normal mode, C = ROM development mode)       
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -l PASSWORD LENGTH          OBSOLETE! If used, this option will be ignored!   
+Tue Nov 24 17:38:20 2026:	                             JTAG password length is determined automatically  
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	 -m JTAG | SBW2 | SBW4 |     OBSOLETE! If used, this option will be ignored!   
+Tue Nov 24 17:38:20 2026:	    AUTO                     Communication protocol is determined automatically
+Tue Nov 24 17:38:20 2026:	                                                                               
+Tue Nov 24 17:38:20 2026:	*******************************************************************************
