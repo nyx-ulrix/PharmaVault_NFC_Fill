@@ -107,6 +107,7 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 2. Put a known weight on it (for example a 100 g item) and note `raw=` in the `SCALE raw=...,grams_x10=...` lines.
 3. Set `SCALE_COUNTS_PER_GRAM` in `main.c` to `(raw_loaded - tare_raw) / grams`, rebuild and flash.
 4. The LCD then shows the weight on its **Pack scale** page.
+5. To re-zero at any time, empty the platform and press **S2** on the LaunchPad. The LCD shows "Taring scale", then "Scale zeroed".
 
 ## 4. Pair the bridge (once)
 

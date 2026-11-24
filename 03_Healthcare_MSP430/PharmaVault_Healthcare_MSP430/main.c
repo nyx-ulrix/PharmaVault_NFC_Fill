@@ -40,6 +40,8 @@
  * debug console, then set this to (raw_loaded - raw_tare) / grams. Depends on the cell. */
 #define SCALE_COUNTS_PER_GRAM 420L
 #define SCALE_TARE_SAMPLES 8
+#define TARE_BUTTON BIT1          /* LaunchPad S2 on P1.1, active low. */
+#define TARE_DEBOUNCE_TICKS 30UL  /* Ignore bounces for ~300 ms after a press. */
 
 #define DEBUG_UART 1                   /* eZ-FET backchannel at 9600 baud. */
 
@@ -88,6 +90,9 @@ static int32_t scale_tare, scale_filtered, scale_grams_x10;
 static int32_t scale_tare_sum;
 static uint8_t scale_tare_count;
 static uint32_t next_scale_log;
+static volatile bool tare_pressed;   /* Set by the Port 1 ISR. */
+static bool tare_from_button;
+static uint32_t tare_rearm_tick;
 /* Last complete WEEK + Day 1..7 answer. Shown whenever a live tap lookup fails. RAM only. */
 static char cached_week[17], cached_text[7][49];
 static bool cache_valid;
@@ -720,12 +725,40 @@ static void service_remote(uint32_t now)
 }
 
 
+/* S2 (P1.1) re-zeroes the scale: input with pull-up, interrupt on the falling (press) edge. */
+static void tare_button_init(void)
+{
+    P1SEL &= ~TARE_BUTTON;
+    P1DIR &= ~TARE_BUTTON;
+    P1REN |= TARE_BUTTON;           /* Internal pull-up: released = high. */
+    P1OUT |= TARE_BUTTON;
+    P1IES |= TARE_BUTTON;           /* High-to-low edge = press. */
+    P1IFG &= ~TARE_BUTTON;          /* Discard a flag set while configuring. */
+    P1IE |= TARE_BUTTON;
+}
+
 /* Load cell: tare on the first samples after boot, then a light low-pass filter
  * and conversion to tenths of a gram. Logs to the debug console once a second. */
 static void service_scale(uint32_t now)
 {
     int32_t raw;
     char line[64];
+    if (tare_pressed) {                                      /* S2 pressed: restart the tare. */
+        tare_pressed = false;
+        tare_rearm_tick = now + TARE_DEBOUNCE_TICKS;
+        if (hx711_present()) {
+            scale_tare_sum = 0;
+            scale_tare_count = 0;
+            tare_from_button = true;
+            display("Taring scale", "Keep it empty", 150);
+            debug_write("SCALE tare requested (S2)\r\n");
+        } else display("Scale offline", "Check HX711", 200);
+    }
+    if (tare_rearm_tick && due(now, tare_rearm_tick)) {     /* Debounce over: listen again. */
+        tare_rearm_tick = 0;
+        P1IFG &= ~TARE_BUTTON;
+        P1IE |= TARE_BUTTON;
+    }
     if (!hx711_poll(&raw)) return;
     if (scale_tare_count < SCALE_TARE_SAMPLES) {            /* Empty platform at power-up = zero. */
         scale_tare_sum += raw;
@@ -734,6 +767,8 @@ static void service_scale(uint32_t now)
             scale_filtered = scale_tare;
             snprintf(line, sizeof line, "SCALE tare raw=%ld\r\n", (long)scale_tare);
             debug_write(line);
+            scale_grams_x10 = 0;
+            if (tare_from_button) { display("Scale zeroed", "0.0 g", 150); tare_from_button = false; }
         }
         return;
     }
@@ -826,6 +861,22 @@ void __attribute__((interrupt(TIMER1_A0_VECTOR))) scheduler_isr(void)
     __bic_SR_register_on_exit(LPM0_bits);
 }
 
+/* Port 1 ISR: S2 press. Disable the pin until the debounce time ends, then wake the CPU. */
+#if defined(__TI_COMPILER_VERSION__)
+#pragma vector=PORT1_VECTOR
+__interrupt void tare_button_isr(void)
+#else
+void __attribute__((interrupt(PORT1_VECTOR))) tare_button_isr(void)
+#endif
+{
+    if (P1IFG & TARE_BUTTON) {
+        P1IE &= ~TARE_BUTTON;       /* Re-enabled by the foreground after ~300 ms. */
+        P1IFG &= ~TARE_BUTTON;
+        tare_pressed = true;
+        __bic_SR_register_on_exit(LPM0_bits);
+    }
+}
+
 /* UART ISR: receive into the ring, or advance the active TX frame. */
 #if defined(__TI_COMPILER_VERSION__)
 #pragma vector=USCI_A0_VECTOR
@@ -863,6 +914,7 @@ int main(void)
     uart_init();
     scheduler_init();
     hx711_init();                 /* Timer0_A 100 ms load-cell sampling tick. */
+    tare_button_init();           /* S2 (P1.1) zeroes the scale. */
     __enable_interrupt();
     reader_online = rc522_init();
     next_nfc = tick_now() + (reader_online ? NFC_PERIOD : 500UL);
