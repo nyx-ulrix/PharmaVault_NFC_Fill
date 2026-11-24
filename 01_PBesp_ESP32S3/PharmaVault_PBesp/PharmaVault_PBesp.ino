@@ -167,15 +167,15 @@ static inline int pv_uid_valid(const char *uid)
 #include "PvWirelessSerial.h"
 #include "PvPillboxSensors.h"
 #include "PvMascot.h"
+#include "PvDashboardGz.h"
 
 static const char DashboardHtml[] PROGMEM = R"PVHTML(
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only">
 <title>PharmaVault · Daily care</title>
 <style>
 /* Shapes: cards and tiles 28px, inputs 16px, buttons, badges and nav are full pills. */
 :root{--bg:#e8f0e3;--bg2:#f4f8f1;--card:#fbfdf9;--ink:#17231b;--muted:#56665b;--line:#d8e3d2;--accent:#3d7a4c;--accent-soft:#d6ead9;--cta:#1d2a21;--cta-ink:#f4f8f1;--peach:#fbe2d3;--sky:#d9e9f1;--butter:#f5edc4;--warn-bg:#fbe4da;--warn-ink:#8a3a1f;--err-bg:#fbe0dc;--err-ink:#962c22;--ring:#c99a2e;--shadow:0 10px 30px rgb(61 104 70/.10)}
-@media(prefers-color-scheme:dark){:root{--bg:#111813;--bg2:#151d17;--card:#1b241d;--ink:#e6efe4;--muted:#a3b3a6;--line:#2a372d;--accent:#7fc08d;--accent-soft:#24392a;--cta:#e6efe4;--cta-ink:#111813;--peach:#3a281f;--sky:#1c2d35;--butter:#36311b;--warn-bg:#3d2419;--warn-ink:#f2b79c;--err-bg:#41201c;--err-ink:#f4aaa0;--ring:#e0b552;--shadow:0 10px 30px rgb(0 0 0/.35)}}
 *{box-sizing:border-box}[hidden]{display:none!important}
 body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:linear-gradient(180deg,var(--bg) 0,var(--bg2) 420px) fixed;min-height:100dvh;-webkit-font-smoothing:antialiased}
 h1,h2,h3,p{margin-top:0}
@@ -760,6 +760,7 @@ refresh();
 </script></body></html>
 
 )PVHTML";
+static_assert(sizeof(DashboardHtml)-1==PV_DASHBOARD_SRC_LEN,"Dashboard HTML changed: run python web/build_web.py");
 
 // Methods stay inside the class so Arduino does not generate invalid forward declarations.
 class PharmaVault {
@@ -1411,7 +1412,7 @@ class PharmaVault {
     if(!saveBytes("network",&updated,sizeof(updated))){requireStorage();return;}network=updated;networkQueued=true;web.send(200,"text/plain","Wi-Fi saved. The ESP32 access point remains available.");
   }
   void startWeb(){
-    web.on("/",HTTP_GET,[this]{if(!authorize())return;noCache();web.send_P(200,"text/html; charset=utf-8",DashboardHtml);});web.on("/state",HTTP_GET,[this]{sendState();});web.on("/mascot.webp",HTTP_GET,[this]{if(!authorize())return;web.sendHeader("Cache-Control","private, max-age=86400");web.send_P(200,"image/webp",reinterpret_cast<const char*>(PvMascotWebp),sizeof(PvMascotWebp));});
+    web.on("/",HTTP_GET,[this]{if(!authorize())return;noCache();web.sendHeader("Content-Encoding","gzip");web.send_P(200,"text/html; charset=utf-8",reinterpret_cast<const char*>(PvDashboardGz),sizeof(PvDashboardGz));});web.on("/state",HTTP_GET,[this]{sendState();});web.on("/mascot.webp",HTTP_GET,[this]{if(!authorize())return;web.sendHeader("Cache-Control","private, max-age=86400");web.send_P(200,"image/webp",reinterpret_cast<const char*>(PvMascotWebp),sizeof(PvMascotWebp));});
     web.on("/test/mode",HTTP_POST,[this]{setIrTestMode();});
     web.on("/clock",HTTP_POST,[this]{setClock();});web.on("/schedule/save",HTTP_POST,[this]{saveSchedule();});web.on("/schedule/mode",HTTP_POST,[this]{setScheduleMode();});
     web.on("/stepper/save",HTTP_POST,[this]{saveStepper();});web.on("/stepper/jog",HTTP_POST,[this]{jogStepper();});web.on("/stepper/align",HTTP_POST,[this]{alignStepper();});
@@ -1424,8 +1425,8 @@ class PharmaVault {
   void begin(){
     pinMode(RetiredServo,INPUT);pinMode(Step1,OUTPUT);pinMode(Step2,OUTPUT);pinMode(Step3,OUTPUT);pinMode(Step4,OUTPUT);writeCoils(0);
     pinMode(RetiredTrigger,INPUT);pinMode(IrPin,INPUT_PULLUP);pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
-    loadSettings();WiFi.mode(WIFI_AP_STA);WiFi.setAutoReconnect(true);snprintf(apSsid,sizeof(apSsid),"PharmaVault-%012llX",static_cast<unsigned long long>(ESP.getEfuseMac()&0xFFFFFFFFFFFFULL));
-    const IPAddress ip(192,168,4,1),mask(255,255,255,0);apStarted=WiFi.softAPConfig(ip,ip,mask)&&WiFi.softAP(apSsid,accessPassword);if(apStarted)dns.start(53,"pharmavault",ip);if(MDNS.begin("pharmavault"))MDNS.addService("http","tcp",80);msp.begin(accessPassword);startWeb();if(network.magic==NetworkMagic)WiFi.begin(network.ssid,network.password);printAccess();
+    loadSettings();WiFi.mode(WIFI_AP_STA);WiFi.setSleep(false);WiFi.setAutoReconnect(true);snprintf(apSsid,sizeof(apSsid),"PharmaVault-%012llX",static_cast<unsigned long long>(ESP.getEfuseMac()&0xFFFFFFFFFFFFULL));
+    const IPAddress ip(192,168,4,1),mask(255,255,255,0);apStarted=WiFi.softAPConfig(ip,ip,mask,IPAddress(uint32_t(0)),ip)&&WiFi.softAP(apSsid,accessPassword);if(apStarted)dns.start(53,"pharmavault",ip);if(MDNS.begin("pharmavault"))MDNS.addService("http","tcp",80);msp.begin(accessPassword);startWeb();if(network.magic==NetworkMagic)WiFi.begin(network.ssid,network.password);printAccess();
   }
   void run(){
     serviceClock(millis());pollUart();updateDeadlines();updateWeek();serviceTimerTest(millis());serviceProviderReport(millis());
