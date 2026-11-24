@@ -1,6 +1,6 @@
 """Regenerate the compressed web assets compiled into the pillbox firmware.
 
-Run after editing the dashboard HTML in PharmaVault_PBesp.ino or web/mascot.webp:
+Run after editing the dashboard HTML in PvDashboardHtml.h or web/mascot.webp:
     python web/build_web.py
 Writes PvDashboardGz.h (gzipped dashboard) and PvMascot.h next to the sketch.
 The sketch static_asserts the HTML length, so a forgotten rebuild fails to compile.
@@ -24,7 +24,7 @@ def write_header(fname, guard, body):
 
 
 def dashboard_html():
-    src = open(os.path.join(SKETCH, "PharmaVault_PBesp.ino"), encoding="utf-8").read()
+    src = open(os.path.join(SKETCH, "PvDashboardHtml.h"), encoding="utf-8").read()
     start = src.index('R"PVHTML(') + len('R"PVHTML(')
     html = src[start:src.index(')PVHTML"')].replace("\r\n", "\n")  # compilers see LF line ends
     return html.encode("utf-8")

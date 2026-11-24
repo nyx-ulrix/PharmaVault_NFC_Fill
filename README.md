@@ -23,7 +23,7 @@ The pillbox makes its own Wi-Fi access point, so no router is needed. Each stati
 | `04_WIRED_BACKUP/` | Earlier wired version (MSP430 and ESP32-S3 joined by UART) | See `04_WIRED_BACKUP/START_HERE.txt` |
 | `Validation/` | Build and test records | |
 
-**Editing the dashboard:** the page lives in the `DashboardHtml` string in `PharmaVault_PBesp.ino`. After changing it (or `web/mascot.webp`), run `python 01_PBesp_ESP32S3/PharmaVault_PBesp/web/build_web.py` to regenerate the gzipped copy the board serves. The build fails with a reminder if you forget.
+**Editing the dashboard:** the page lives in `PvDashboardHtml.h`. After changing it (or `web/mascot.webp`), run `python 01_PBesp_ESP32S3/PharmaVault_PBesp/web/build_web.py` to regenerate the gzipped copy the board serves. The build fails with a reminder if you forget.
 
 The detailed guides are the `.txt` files in the root: `START_HERE.txt`, `FRESH_PC_INSTALL.txt`, `WIRING.txt`, `TEST_AND_DEMO.txt`, `NORMAL_OPERATION.txt` and `WIRED_BACKUP_RESTORE.txt`.
 
