@@ -13,8 +13,9 @@ static const uint32_t PV_BRIDGE_LINK_TIMEOUT_MS=8000;
 static const uint16_t PV_BRIDGE_PORT=4210;
 
 inline bool pvBridgeSecretValid(const char *s) {
-  if(!s||strlen(s)!=32)return false;
-  for(size_t i=0;i<32;++i)if(pv_hex(s[i])<0)return false;
+  // WPA2 password: 8 to 32 printable characters, no spaces (default PharmaVault67).
+  const size_t n=s?strlen(s):0;if(n<8||n>32)return false;
+  for(size_t i=0;i<n;++i)if(s[i]<=' '||s[i]>'~')return false;
   return true;
 }
 inline bool pvBridgeSsidValid(const char *s) {

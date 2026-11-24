@@ -644,7 +644,6 @@ class PharmaVault {
     for(size_t i=0;i<n;++i){const unsigned char c=name[i];if(c<32||c>126||c=='"'||c=='\\')return false;if(c!=' ')nonspace=true;}
     return nonspace;
   }
-  static bool validSecret(const char *s){if(strlen(s)!=32)return false;for(size_t i=0;i<32;++i)if(pv_hex(s[i])<0)return false;return true;}
   static void randomHex(char *out){for(size_t i=0;i<4;++i)snprintf(out+8*i,9,"%08lX",static_cast<unsigned long>(esp_random()));}
   bool canTest(uint32_t now)const{return storageOk&&phase==Phase::Idle&&(!hadMotion||elapsed(now,finishedAt,CooldownMs));}
   bool irFresh(uint32_t now)const{return irHasSample&&now-irAt<=IrFreshMs;}
@@ -827,9 +826,7 @@ class PharmaVault {
   const char *nfcStatus(uint32_t now)const{return readerFresh(now)?"Tap any kit card for weekly status on the MSP430 LCD. Tapping is optional and never dispenses or resets the week.":"Waiting for the optional MSP430 weekly-status card reader.";}
 
   void loadSettings(){
-    storageOk=prefs.begin("pharmavault",false);String secret=storageOk?prefs.getString("access",""):String("");
-    if(validSecret(secret.c_str()))memcpy(accessPassword,secret.c_str(),33);
-    else{randomHex(accessPassword);if(storageOk&&prefs.putString("access",accessPassword)!=32)storageOk=false;}
+    storageOk=prefs.begin("pharmavault",false);strcpy(accessPassword,"PharmaVault67");  // fixed AP and dashboard password
     if(!storageOk)return;
     if(prefs.getBytesLength("network")==sizeof(network))prefs.getBytes("network",&network,sizeof(network));
     if(network.magic!=NetworkMagic||!memchr(network.ssid,0,sizeof(network.ssid))||!memchr(network.password,0,sizeof(network.password))||!network.ssid[0]||strlen(network.password)>63||(network.password[0]&&strlen(network.password)<8))network=NetworkSettings{};

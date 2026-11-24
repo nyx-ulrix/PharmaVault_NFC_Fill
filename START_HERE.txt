@@ -48,14 +48,14 @@ FIRST INSTALL
 PAIR ESPmsp TO PBesp ONCE
 1. Open PBesp's Serial Monitor at115200 baud. Send ?.
    Expected banner: PHARMAVAULT PBesp wireless 2 (local sensors)
-2. Copy its 'Wi-Fi name' (PharmaVault-...) and 32-character 'Wi-Fi password'.
+2. Copy its 'Wi-Fi name' (PharmaVault-...) and 'Wi-Fi password' (PharmaVault67).
 3. Select the FireBeetle's COM port. Serial Monitor115200, line ending Newline.
    Expected banner: PHARMAVAULT wireless bridge 1
 4. Send SETUP. Enter the exact PBesp Wi-Fi name, then its exact Wi-Fi password
    at the two prompts. No source-code credentials need editing.
 5. Expect 'Pair saved' and 'BRIDGE ONLINE'. Pairing is saved in the FireBeetle
    and reconnects automatically. Send ? there to see connection/frame counters.
-6. Dashboard username: demo; password: PBesp's printed Wi-Fi password.
+6. Dashboard username: demo; password: PharmaVault67 (same as the Wi-Fi).
    The dashboard should say the healthcare station is connected.
    Windows may report No Internet on this access point; stay connected.
    Use automatic DHCP for the laptop. Do not assign it192.168.4.1: that is

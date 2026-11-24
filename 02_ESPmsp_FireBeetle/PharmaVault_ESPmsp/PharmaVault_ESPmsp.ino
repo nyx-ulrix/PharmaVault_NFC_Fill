@@ -54,10 +54,10 @@ class PharmaVaultBridge {
       const size_t length=strlen(console_);
       if(!pvBridgeSsidValid(console_)){Serial.println("Enter the exact PharmaVault- plus 12 uppercase hexadecimal digits printed by the main S3, or CANCEL.");return;}
       memcpy(nextSsid_,console_,length+1);stage_=SetupStage::Password;
-      Serial.println("Paste the main S3's 32-character Wi-Fi password, then Enter. It will not be echoed.");return;
+      Serial.println("Type the main S3's Wi-Fi password (PharmaVault67), then Enter. It will not be echoed.");return;
     }
     if(stage_==SetupStage::Password){
-      if(!pvBridgeSecretValid(console_)){Serial.println("Expected 32 uppercase hexadecimal characters from the S3's Wi-Fi password. Try again, or CANCEL.");return;}
+      if(!pvBridgeSecretValid(console_)){Serial.println("Expected the S3's Wi-Fi password (8 to 32 characters, no spaces). Try again, or CANCEL.");return;}
       Pair updated{};updated.magic=PairMagic;memcpy(updated.ssid,nextSsid_,sizeof(updated.ssid));memcpy(updated.secret,console_,33);
       if(!storageOk_||prefs_.putBytes("pair1",&updated,sizeof(updated))!=sizeof(updated)){
         Serial.println("Pair was NOT saved: settings storage failed. Restart and retry SETUP.");memset(&updated,0,sizeof(updated));return;
