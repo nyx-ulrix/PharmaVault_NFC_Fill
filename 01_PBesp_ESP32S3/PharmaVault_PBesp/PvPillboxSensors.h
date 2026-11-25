@@ -1,4 +1,7 @@
-/* Author: Clifton Ng Jun Heng (CN). Pillbox sensors: DHT11 (through the Adafruit DHT library in DHT.h/DHT.cpp, not our code), NTC thermistor on the ADC, IR. Revised 2026-11-25. */
+/* Author: Clifton Ng Jun Heng (CN). Pillbox sensors: DHT11, NTC thermistor on the ADC, IR. Revised 2026-11-25.
+ * DHT11 bit timing is read by the Adafruit DHT sensor library (DHT.h/DHT.cpp, MIT licence, not our code).
+ * Our code here: read scheduling, invalid-reading checks, scaling to x100 units and the humidity alert.
+ * Our own low-level DHT11 driver is in 04_WIRED_BACKUP/CCS/PharmaVault_MSP430/dht11.c (MSP430 Timer0_A input capture). */
 #ifndef PHARMAVAULT_PILLBOX_SENSORS_H
 #define PHARMAVAULT_PILLBOX_SENSORS_H
 #include <Arduino.h>
