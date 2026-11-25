@@ -45,7 +45,7 @@
 
 #define DEBUG_UART 1                   /* eZ-FET backchannel at 9600 baud. */
 
-typedef enum { CMD_ENV, CMD_TAG, CMD_LOGREQ, CMD_CLEAR, CMD_READER, CMD_MED } CommandKind;
+typedef enum { CMD_ENV, CMD_TAG, CMD_LOGREQ, CMD_CLEAR, CMD_READER, CMD_MED, CMD_SCALE } CommandKind;
 typedef struct {
     CommandKind kind;
     uint16_t seq;
@@ -90,6 +90,8 @@ static int32_t scale_tare, scale_filtered, scale_grams_x10;
 static int32_t scale_tare_sum;
 static uint8_t scale_tare_count;
 static uint32_t next_scale_log;
+static int32_t scale_sent_x10 = 0x7fffffffL;  /* Last weight reported to the pillbox dashboard. */
+static uint32_t next_scale_send, scale_keepalive_tick;
 static volatile bool tare_pressed;   /* Set by the Port 1 ISR. */
 static bool tare_from_button;
 static uint32_t tare_rearm_tick;
@@ -412,7 +414,7 @@ static bool expire_queued_tag(uint32_t now)
 /* Encode and queue bytes to the TX ISR. Retries keep the original sequence. */
 static void service_transmit(uint32_t now)
 {
-    static const char *const names[] = {"ENV", "TAG", "LOGREQ", "CLEAR", "READER", "MED"};
+    static const char *const names[] = {"ENV", "TAG", "LOGREQ", "CLEAR", "READER", "MED", "SCALE"};
     const Command *command;
     char body[PV_FRAME_SIZE];
     size_t length;
@@ -778,6 +780,19 @@ static void service_scale(uint32_t now)
         next_scale_log = now + 100UL;                        /* Once per second. */
         snprintf(line, sizeof line, "SCALE raw=%ld,grams_x10=%ld\r\n", (long)raw, (long)scale_grams_x10);
         debug_write(line);
+    }
+    /* Dashboard report: every 5 s if the weight moved by 0.5 g or more, and every 30 s
+     * as a keep-alive. Only when the queue is idle and the link is up, so card taps keep priority. */
+    if (due(now, next_scale_send) && !command_count && !(remote_warning_mask & 8)) {
+        const int32_t change = scale_grams_x10 - scale_sent_x10;
+        next_scale_send = now + 500UL;
+        if (change >= 5 || change <= -5 || due(now, scale_keepalive_tick)) {
+            snprintf(line, sizeof line, "%ld", (long)scale_grams_x10);
+            if (enqueue(CMD_SCALE, line)) {
+                scale_sent_x10 = scale_grams_x10;
+                scale_keepalive_tick = now + 3000UL;
+            }
+        }
     }
 }
 

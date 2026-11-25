@@ -9,7 +9,7 @@ class PvWirelessSerial {
   PvTcpChannel channel_;
   const char *secret_=nullptr;bool started_=false;uint32_t listenAt_=0;
   void startListener(){
-    listenAt_=millis();server_.begin();server_.setNoDelay(true);started_=bool(server_);
+    listenAt_=nowMs();server_.begin();server_.setNoDelay(true);started_=bool(server_);
     if(!started_)Serial.println("Wireless bridge listener unavailable; retrying in 3 seconds.");
   }
  public:
@@ -18,8 +18,8 @@ class PvWirelessSerial {
     startListener();
   }
   void poll(){
-    if(!started_){if(pvBridgeSecretValid(secret_)&&millis()-listenAt_>=3000)startListener();return;}
-    const uint32_t now=millis();channel_.poll(now);
+    if(!started_){if(pvBridgeSecretValid(secret_)&&nowMs()-listenAt_>=3000)startListener();return;}
+    const uint32_t now=nowMs();channel_.poll(now);
     WiFiClient pending=server_.accept();
     if(pending){
       const IPAddress ip=pending.remoteIP();

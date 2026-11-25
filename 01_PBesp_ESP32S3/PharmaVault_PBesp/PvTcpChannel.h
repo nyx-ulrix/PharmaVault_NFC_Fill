@@ -60,7 +60,7 @@ class PvTcpChannel {
   int read(){return online()?incoming_.read():-1;}
   int availableForWrite()const{return online()&&outgoing_.room()?PV_FRAME_SIZE:0;}
   size_t write(const uint8_t *data,size_t length){
-    if(!online()||!pvBridgeFrameValid(data,length)||!outgoing_.push(data,length,millis()))return 0;
+    if(!online()||!pvBridgeFrameValid(data,length)||!outgoing_.push(data,length,nowMs()))return 0;
     return length;
   }
   void poll(uint32_t now){

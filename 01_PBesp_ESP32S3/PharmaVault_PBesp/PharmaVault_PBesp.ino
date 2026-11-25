@@ -1,5 +1,9 @@
 /* PHARMAVAULT PBesp wireless 2; independent patient pillbox. ESP32-S3 / Arduino-ESP32 core 3.x.
  * AI-assisted prototype. Team: record actual authors, changes and personal reflections.
+ * Version history:
+ *   wireless 2 (2026-11-17): independent pillbox release.
+ *   2026-11-25, Malcolm Liew Jia En (ML): hardware-timer system tick and IR sampling
+ *     (CEG2002 timer functions + ISRs); automatic clock sync from the dashboard.
  * 28BYJ-48 via ULN2003 IN1/2/3/4 -> GPIO5/6/7/8; IR OUT -> GPIO14 at3.3V.
  * Local sensors: GPIO1 ADC1 NTC10k/B3950; GPIO2 DHT11 DATA, both 3V3.
  * No servo is used. GPIO3 is an unused input; GPIO13 is driven HIGH to power the NTC divider; each station has its own local common ground.
@@ -24,6 +28,51 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <esp_system.h>
+#include <esp_timer.h>
+#include <soc/gpio_reg.h>
+
+/* ---- Hardware timers (CEG2002 timer functions + timer ISRs). Author: Malcolm Liew Jia En (ML) ----
+ * Timer 1, system tick (task scheduling): fires every 1 ms, like the MSP430 Timer1_A tick. Every
+ * schedule, timeout and the wall clock read nowMs(). The ISR copies the time from the
+ * crystal-driven hardware counter (esp_timer), so a tick held off by a flash write still
+ * catches up exactly and the dose clock never drifts.
+ * Timer 0, IR hand sensor (event trigger): fires every 20 ms and latches the GPIO14 level and
+ * its time; the main loop consumes each new sample and runs the hand-gesture rules on it. */
+static hw_timer_t *sysTimer=nullptr;                  // hardware timer 1 handle (ML)
+static volatile uint32_t sysMs=0;                      // system time in ms, written only by the tick ISR (ML)
+
+/* onSysTick: timer-1 ISR, every 1 ms. No arguments. Refreshes sysMs from the hardware counter.
+ * Author: Malcolm Liew Jia En (ML) */
+static void IRAM_ATTR onSysTick(){sysMs=uint32_t(esp_timer_get_time()/1000ULL);}   /* tick from hardware counter (ML) */
+
+/* nowMs: returns the current system time in ms (the timer-1 tick). Used in place of millis().
+ * Author: Malcolm Liew Jia En (ML) */
+static inline uint32_t nowMs(){return sysMs;}          // 32-bit read is atomic on the ESP32 (ML)
+
+/* startSysTick: configures hardware timer 1 at 1 MHz with a 1 ms auto-reload alarm.
+ * No arguments. Call first in begin(), before anything reads the time.
+ * Author: Malcolm Liew Jia En (ML) */
+static void startSysTick(){
+  sysMs=uint32_t(esp_timer_get_time()/1000ULL);   // valid before the first interrupt (ML)
+  sysTimer=timerBegin(1000000);                     // 1 MHz timer clock (ML)
+  timerAttachInterrupt(sysTimer,&onSysTick);        // run onSysTick on each alarm (ML)
+  timerAlarm(sysTimer,1000,true,0);                 // every 1 ms, auto-reload, forever (ML)
+}
+
+static constexpr uint8_t IrTimerGpio=14;                // IR sensor OUT pin read by the ISR (ML)
+static hw_timer_t *irTimer=nullptr;                     // hardware timer 0 handle (ML)
+static portMUX_TYPE irMux=portMUX_INITIALIZER_UNLOCKED; // guards the ISR-shared sample (ML)
+static volatile int8_t irIsrLevel=-1;                   // latest level: 0 = LOW (hand), 1 = HIGH (clear) (ML)
+static volatile uint32_t irIsrAt=0,irIsrCount=0;        // sample time (ms) and sample counter (ML)
+
+/* onIrTimer: timer-0 ISR, every 20 ms. No arguments. Reads GPIO14 straight from the GPIO input
+ * register (ISR-safe), timestamps it with the system tick and publishes it to the main loop.
+ * Author: Malcolm Liew Jia En (ML) */
+static void IRAM_ATTR onIrTimer(){
+  const int8_t level=(REG_READ(GPIO_IN_REG)&(1UL<<IrTimerGpio))?1:0;   // direct register read (ML)
+  const uint32_t at=sysMs;                                               // sample time from the tick (ML)
+  portENTER_CRITICAL_ISR(&irMux);irIsrLevel=level;irIsrAt=at;++irIsrCount;portEXIT_CRITICAL_ISR(&irMux);  // publish atomically (ML)
+}
 #include <WiFi.h>
 #include <Preferences.h>
 #include <esp_random.h>
@@ -200,7 +249,7 @@ class PharmaVault {
   // Day labels are historical snapshots; old firmware history remains readable.
   struct DailyRecord {uint32_t day,preparedAt,completedAt;uint8_t slot,state,overdue,reserved;char label[17];uint8_t padding[3];};
   struct DailyJournal {uint32_t magic,maxDay;DailyRecord records[SlotCount];};
-  static constexpr uint32_t StaRetryMs=120000;uint32_t staRetryAt=0;WebServer web{80};DNSServer dns;PvWirelessSerial msp;Preferences prefs;
+  static constexpr int64_t AutoClockMaxDriftS=120;static constexpr uint32_t StaRetryMs=120000,ScaleFreshMs=45000;uint32_t staRetryAt=0,scaleAt=0;int32_t scaleX10=0;bool scaleSeen=false;WebServer web{80};DNSServer dns;PvWirelessSerial msp;Preferences prefs;
   NetworkSettings network{};WeekSettings week{};
   char statusChunk[2200]{}; // Reused on the main loop; keep large status buffers off its stack.
   static constexpr uint32_t RefillTextMagic=0x50564D31;
@@ -224,7 +273,7 @@ class PharmaVault {
   char accessPassword[33]{},apSsid[32]{},token[33]{},lastUid[21]{};
   uint32_t tokenAt=0;
   int32_t temperature=-32768,humidity=65535;uint16_t environmentFlags=4;uint32_t environmentAt=0;bool environmentSeen=false;
-  int8_t irRaw=-1;bool irHasSample=false;uint32_t irAt=0,irCandidateAt=0,lastIrPoll=0;
+  int8_t irRaw=-1;bool irHasSample=false;uint32_t irAt=0,irCandidateAt=0,lastIrCount=0;
   uint64_t clockEpoch=0;uint32_t clockTick=0,clockRemainder=0;
 
   static bool elapsed(uint32_t now,uint32_t then,uint32_t duration){return now-then>=duration;}
@@ -477,7 +526,7 @@ class PharmaVault {
   bool uartSend(const char *body){char frame[PV_FRAME_SIZE];const size_t n=pv_encode(body,frame,sizeof(frame));return n&&msp.availableForWrite()>=int(n)&&msp.write(reinterpret_cast<const uint8_t*>(frame),n)==n;}
   void sendLcd(const char *code,int slot){char body[64];snprintf(body,sizeof(body),"PV1,0,UI,%s,%d",code,slot);uartSend(body);}
   void finishMotion(){
-    writeCoils(0);phase=Phase::Idle;finishedAt=millis();hadMotion=true;invalidateIr();
+    writeCoils(0);phase=Phase::Idle;finishedAt=nowMs();hadMotion=true;invalidateIr();
     if(motion==Motion::Dose){
       currentSlot=targetSlot;positionKnown=true;
       if(!changeRecord(motionDay,DayState::Completed)){positionKnown=false;sendLcd("MOTOR_FAULT",-1);return;}
@@ -497,7 +546,7 @@ class PharmaVault {
   }
   // Nonblocking half-steps. A late loop never bursts missed steps to catch up.
   void runMotion(){
-    invalidateIr();const uint32_t now=millis();
+    invalidateIr();const uint32_t now=nowMs();
     switch(phase){
       case Phase::Queued:
         phase=Phase::Stepping;stepAt=now;
@@ -515,11 +564,16 @@ class PharmaVault {
       case Phase::Idle:break;
     }
   }
-  void pollIr(uint32_t now){
-    if(phase!=Phase::Idle){invalidateIr();return;}if(!elapsed(now,lastIrPoll,IrPollMs))return;lastIrPoll=now;
-    const int8_t raw=digitalRead(IrPin)==LOW?0:1;
-    if(!irHasSample||now-irAt>IrMaxGapMs){resetHandGesture();irCandidateAt=now;}else if(raw!=irRaw)irCandidateAt=now;
-    irRaw=raw;irAt=now;irHasSample=true;
+  /* pollIr: consumes the newest sample latched by the IR timer ISR (every IrPollMs = 20 ms) and
+   * updates the hand-sensor state used by the gesture rules. Argument (unused): current time in ms.
+   * Author: Malcolm Liew Jia En (ML) */
+  void pollIr(uint32_t){
+    if(phase!=Phase::Idle){invalidateIr();return;}                                          // ignore the sensor while the motor runs (ML)
+    int8_t raw;uint32_t at,count;
+    portENTER_CRITICAL(&irMux);raw=irIsrLevel;at=irIsrAt;count=irIsrCount;portEXIT_CRITICAL(&irMux);  // copy the ISR sample atomically (ML)
+    if(count==lastIrCount||raw<0)return;lastIrCount=count;                                 // only act on a new sample (ML)
+    if(!irHasSample||at-irAt>IrMaxGapMs){resetHandGesture();irCandidateAt=at;}else if(raw!=irRaw)irCandidateAt=at;
+    irRaw=raw;irAt=at;irHasSample=true;
   }
   void updateDeadlines(){
     if(!clockSynced||!storageOk)return;const uint32_t day=localDay();
@@ -660,13 +714,14 @@ class PharmaVault {
     }
     else if(n==4&&!strcmp(f[2],"READER")){
       if(!strcmp(f[3],"BOOT")){readerSeen=false;answer="ACK,OK,READER_BOOT";}
-      else if(!strcmp(f[3],"ONLINE")||!strcmp(f[3],"EMPTY")){readerSeen=true;readerAt=millis();answer="ACK,OK,READER_ONLINE";}
+      else if(!strcmp(f[3],"ONLINE")||!strcmp(f[3],"EMPTY")){readerSeen=true;readerAt=nowMs();answer="ACK,OK,READER_ONLINE";}
     }else if(n==4&&pv_uid_valid(f[3])&&(!strcmp(f[2],"TAG")||!strcmp(f[2],"LOGREQ"))){
       memcpy(lastUid,f[3],strlen(f[3])+1);updateWeek();
       const char *status=weekRefillDue()?"REFILL":!weekConfigured()?"SETUP":!clockSynced?"CLOCK":"ACTIVE";
       snprintf(refill,sizeof(refill),"WEEK,%u,%s",unsigned(weekRefillDue()?7:weekDay()),status);answer=refill;
       nfcLastAction="Weekly status sent; the healthcare MSP430 fetches all seven saved refill instructions. Card taps never move the motor or confirm refill.";
     }else if(n==4&&!strcmp(f[2],"CLEAR")&&pv_uid_valid(f[3]))answer="ACK,OK,CARD_REMOVED";
+    else if(n==4&&!strcmp(f[2],"SCALE")){int32_t g=0;if(pv_i32(f[3],&g)&&g>=-100000&&g<=1000000){scaleX10=g;scaleAt=nowMs();scaleSeen=true;answer="ACK,OK,SCALE";}}  // Healthcare-station load cell, tenths of a gram
     char body[PV_FRAME_SIZE];snprintf(body,sizeof(body),"PV1,%u,%s",unsigned(seq),answer);uartSend(body);
   }
   void pollUart(){
@@ -674,7 +729,7 @@ class PharmaVault {
     static uint32_t lastGeneration=0;
     msp.poll();
     // Never combine a partial old stream with a newly authenticated session.
-    if(lastGeneration!=msp.generation()){used=0;overflow=false;lastGeneration=msp.generation();readerSeen=false;providerReportAt=millis()-5000;providerReportPart=0;}
+    if(lastGeneration!=msp.generation()){used=0;overflow=false;lastGeneration=msp.generation();readerSeen=false;providerReportAt=nowMs()-5000;providerReportPart=0;}
     if(!msp.online()){used=0;overflow=false;readerSeen=false;return;}
     for(unsigned i=0;i<128&&msp.available();++i){const int c=msp.read();if(c=='\r')continue;
       if(c=='\n'){if(used&&!overflow){line[used]=0;handleUart(line);}used=0;overflow=false;}
@@ -684,7 +739,7 @@ class PharmaVault {
   void noCache(){web.sendHeader("Cache-Control","no-store");}
   bool authorize(){if(web.authenticate("demo",accessPassword))return true;web.requestAuthentication(BASIC_AUTH,"PharmaVault");return false;}
   const char *activeToken(uint32_t now){if(phase!=Phase::Idle)return "";if(!token[0]||elapsed(now,tokenAt,TicketLifetimeMs)){randomHex(token);tokenAt=now;}return token;}
-  bool consumeToken(){if(phase!=Phase::Idle||!token[0]||elapsed(millis(),tokenAt,TicketLifetimeMs)||web.arg("token")!=token){web.send(409,"text/plain","Someone else just made a change, or this page sat open too long. Check the screen and try again.");return false;}token[0]=0;return true;}
+  bool consumeToken(){if(phase!=Phase::Idle||!token[0]||elapsed(nowMs(),tokenAt,TicketLifetimeMs)||web.arg("token")!=token){web.send(409,"text/plain","Someone else just made a change, or this page sat open too long. Check the screen and try again.");return false;}token[0]=0;return true;}
   bool requireStorage(){if(storageOk)return true;web.send(503,"text/plain","Settings storage unavailable. Automatic operation is stopped.");return false;}
   bool confirmed(){if(web.arg("confirm")=="1")return true;web.send(400,"text/plain","Confirm this setup change.");return false;}
   bool setupRequest(){if(!authorize())return false;noCache();return requireStorage()&&confirmed();}
@@ -695,7 +750,7 @@ class PharmaVault {
       static_cast<unsigned long>(r?r->preparedAt:0),static_cast<unsigned long>(r?r->completedAt:0));json+=data;
   }
   void sendState(){
-    if(!authorize())return;serviceClock(millis());updateDeadlines();updateWeek();const uint32_t now=millis();serviceTimerTest(now);const bool envFresh=environmentSeen&&!elapsed(now,environmentAt,16000);
+    if(!authorize())return;serviceClock(nowMs());updateDeadlines();updateWeek();const uint32_t now=nowMs();serviceTimerTest(now);const bool envFresh=environmentSeen&&!elapsed(now,environmentAt,16000);
     char temp[16]="null",rh[16]="null",epoch[24]="null",raw[8]="null",age[16]="null";
     if(envFresh&&temperature!=-32768)snprintf(temp,sizeof(temp),"%ld",static_cast<long>(temperature));
     if(envFresh&&humidity!=65535)snprintf(rh,sizeof(rh),"%ld",static_cast<long>(humidity));
@@ -728,7 +783,7 @@ class PharmaVault {
       "\"handArmed\":%s,\"handStatus\":\"%s\",\"nfcStatus\":\"%s\",\"nfcLastAction\":\"%s\",",
       raw,stable?"true":"false",age,static_cast<unsigned long>(irHasSample?now-irCandidateAt:0),unsigned(IrHandLevel),stable?(irRaw==IrHandLevel?"true":"false"):"null",
       irStatus(now),handArmed?"true":"false",handStatus(now),nfcStatus(now),nfcLastAction);json+=statusChunk;
-    snprintf(statusChunk,sizeof(statusChunk),"\"envFlags\":%u,\"tempMin\":%ld,\"tempMax\":%ld,\"rhMax\":%u,",unsigned(envFresh?environmentFlags:4),long(PvPillboxSensors::MinDemoTemperature),long(PvPillboxSensors::MaxDemoTemperature),unsigned(sensors.maxHumidity));json+=statusChunk;json+="\"homeSsid\":";appendQuoted(json,network.magic==NetworkMagic?network.ssid:"");json+=",";json+="\"refillInstructions\":[";
+    snprintf(statusChunk,sizeof(statusChunk),"\"envFlags\":%u,\"tempMin\":%ld,\"tempMax\":%ld,\"rhMax\":%u,",unsigned(envFresh?environmentFlags:4),long(PvPillboxSensors::MinDemoTemperature),long(PvPillboxSensors::MaxDemoTemperature),unsigned(sensors.maxHumidity));json+=statusChunk;json+="\"scaleX10\":";json+=(scaleSeen&&!elapsed(now,scaleAt,ScaleFreshMs))?String(scaleX10):String("null");json+=",";json+="\"homeSsid\":";appendQuoted(json,network.magic==NetworkMagic?network.ssid:"");json+=",";json+="\"refillInstructions\":[";
     for(uint8_t i=0;i<7;++i){if(i)json+=',';appendQuoted(json,refillText.text[i]);}
     json+="],\"today\":";appendRecord(json,recordFor(localDay()),localDay());json+=",\"history\":[";
     bool comma=false;for(uint8_t i=0;i<8;++i)if(journal.records[i].day){if(comma)json+=',';appendRecord(json,&journal.records[i],0);comma=true;}
@@ -744,7 +799,7 @@ class PharmaVault {
     const bool timed=timedArg=="1";
     if(enabled=="1"){
       if(web.arg("unloaded")!="1"){web.send(400,"text/plain","Confirm an empty carousel or dummy contents for repeated tests.");return;}
-      if(!canEnableIrTest(millis())&&!(timed&&timerTestMode&&stepper.verified&&canTest(millis()))){web.send(409,"text/plain","Save verified stepper settings, resolve faults and wait for idle cooldown before starting tests.");return;}
+      if(!canEnableIrTest(nowMs())&&!(timed&&timerTestMode&&stepper.verified&&canTest(nowMs()))){web.send(409,"text/plain","Save verified stepper settings, resolve faults and wait for idle cooldown before starting tests.");return;}
     }
     if(!consumeToken())return;
     if(enabled=="0"){
@@ -754,18 +809,38 @@ class PharmaVault {
     pauseSchedule("Starting IR tests. Daily schedule paused.");
     // Moving the carousel for tests must not leave a prepared daily dose resumable.
     if(!invalidatePending()){requireStorage();return;}
-    irTestCycles=0;irTestMode=true;timerTestMode=timed;timerTestStartedAt=millis();timerTestStage=TimerTestStage::Waiting;invalidateIr();
+    irTestCycles=0;irTestMode=true;timerTestMode=timed;timerTestStartedAt=nowMs();timerTestStage=TimerTestStage::Waiting;invalidateIr();
     lastAction=timed?"Timer test started: ready after 10 seconds; overdue after 30 seconds. One hand-triggered test cycle, then restart to repeat.":
       "IR TEST MODE active. Clear the sensor, then hold a hand for 1.5 seconds. Tests do not record daily doses.";
     web.send(200,"text/plain",lastAction);
   }
+  /* parseEpoch: reads the "epoch" request field (UTC seconds) into parsed and checks it lies in
+   * 2020 to 2099. Sends a 400 reply and returns false if it is missing or invalid.
+   * Author: Malcolm Liew Jia En (ML) */
+  bool parseEpoch(uint64_t &parsed){
+    const String value=web.arg("epoch");parsed=0;
+    if(!value.length()||value.length()>10){web.send(400,"text/plain","Send a valid UTC epoch time.");return false;}
+    for(size_t i=0;i<value.length();++i){const char c=value.c_str()[i];if(c<'0'||c>'9'){web.send(400,"text/plain","Invalid epoch time.");return false;}parsed=parsed*10+unsigned(c-'0');}
+    if(parsed<1577836800ULL||parsed>=4102444800ULL){web.send(400,"text/plain","Clock date must be between 2020 and 2099.");return false;}
+    return true;
+  }
+  /* autoClock: POST /clock/auto, sent by the dashboard each time it connects. Sets an unset
+   * clock, quietly corrects drift of up to 2 minutes, and refuses larger jumps (those can mark
+   * days missed), which stay manual. Request fields: epoch (UTC seconds), token.
+   * Author: Malcolm Liew Jia En (ML) */
+  void autoClock(){
+    if(!authorize())return;noCache();uint64_t parsed=0;if(!parseEpoch(parsed)||!consumeToken())return;
+    const bool wasSynced=clockSynced;
+    if(wasSynced){serviceClock(nowMs());const int64_t drift=int64_t(parsed)-int64_t(clockEpoch);
+      if(drift>AutoClockMaxDriftS||drift<-AutoClockMaxDriftS){  // large jump: leave it to Sync clock (ML)
+        web.send(409,"text/plain","The pillbox clock differs from this device by more than 2 minutes. Check both, then use Sync clock in Settings.");return;}}
+    clockEpoch=parsed;clockTick=nowMs();clockRemainder=0;clockSynced=true;updateDeadlines();updateWeek();
+    web.send(200,"text/plain",wasSynced?"Clock adjusted from this device.":"Clock set from this device.");
+  }
   void setClock(){
-    if(!setupRequest())return;const String value=web.arg("epoch");uint64_t parsed=0;
-    if(!value.length()||value.length()>10){web.send(400,"text/plain","Send a valid UTC epoch time.");return;}
-    for(size_t i=0;i<value.length();++i){const char c=value.c_str()[i];if(c<'0'||c>'9'){web.send(400,"text/plain","Invalid epoch time.");return;}parsed=parsed*10+unsigned(c-'0');}
-    if(parsed<1577836800ULL||parsed>=4102444800ULL){web.send(400,"text/plain","Clock date must be between 2020 and 2099.");return;}
+    if(!setupRequest())return;uint64_t parsed=0;if(!parseEpoch(parsed))return;
     if(!consumeToken())return;pauseSchedule("Clock changed. Check the displayed Singapore time and re-enable the scheduler.");
-    clockEpoch=parsed;clockTick=millis();clockRemainder=0;clockSynced=true;updateDeadlines();updateWeek();
+    clockEpoch=parsed;clockTick=nowMs();clockRemainder=0;clockSynced=true;updateDeadlines();updateWeek();
     web.send(200,"text/plain","Clock set from the laptop. Verify Singapore date/time before enabling.");
   }
   void saveSchedule(){
@@ -777,7 +852,7 @@ class PharmaVault {
   void setScheduleMode(){
     if(!setupRequest())return;const String enabled=web.arg("enabled");if(enabled!="0"&&enabled!="1"){web.send(400,"text/plain","Choose enabled 0 or 1.");return;}
     if(enabled=="1"&&irTestMode){web.send(409,"text/plain","Stop IR test mode and confirm alignment before enabling the daily schedule.");return;}
-    if(enabled=="1"&&!readyToEnable(millis())){web.send(409,"text/plain",systemStatus(millis()));return;}
+    if(enabled=="1"&&!readyToEnable(nowMs())){web.send(409,"text/plain",systemStatus(nowMs()));return;}
     if(!consumeToken())return;if(enabled=="0")pauseSchedule("Daily schedule and IR tests paused.");else scheduleEnabled=true;invalidateIr();
     lastAction=scheduleEnabled?"Scheduler enabled. At the daily time today's dose becomes available; only a fresh hand presentation moves the carousel.":"Scheduler paused. Existing history and alerts remain saved.";web.send(200,"text/plain",lastAction);
   }
@@ -789,7 +864,7 @@ class PharmaVault {
   }
   void jogStepper(){
     if(!setupRequest())return;int32_t count=0;
-    if(!canTest(millis())){web.send(409,"text/plain","Wait between movements and resolve any storage fault.");return;}
+    if(!canTest(nowMs())){web.send(409,"text/plain","Wait between movements and resolve any storage fault.");return;}
     if(!pv_i32(web.arg("steps").c_str(),&count)||!count||count<-512||count>512||web.arg("clear")!="1"){web.send(400,"text/plain","Use -512 to 512 half-steps, excluding zero, with the mechanism clear.");return;}
     if(!consumeToken())return;pauseSchedule("Manual stepper jog. Confirm alignment again afterward.");if(!invalidatePending()){requireStorage();return;}
     positionKnown=false;moveDirection=count<0?-1:1;stepsRemaining=uint16_t(count<0?-count:count);targetSlot=0;motion=Motion::Jog;phase=Phase::Queued;invalidateIr();
@@ -804,9 +879,9 @@ class PharmaVault {
     if(!consumeToken())return;pauseSchedule("Current compartment confirmed. Check time and enable when ready.");currentSlot=uint8_t(slot);positionKnown=true;web.send(200,"text/plain","Current position recorded without movement. After the daily time, a hand advances to the NEXT compartment.");
   }
   void refillWeek(){
-    if(!setupRequest())return;serviceClock(millis());updateDeadlines();updateWeek();
+    if(!setupRequest())return;serviceClock(nowMs());updateDeadlines();updateWeek();
     if(web.arg("filled")!="1"||web.arg("parked")!="1"){web.send(400,"text/plain","Confirm days 1-7 are refilled with the correct day-specific pills and compartment 8 is empty and physically parked.");return;}
-    if(!canRefillWeek(millis())){web.send(409,"text/plain","A new week needs the refill reminder (or initial setup), a correct clock, verified stepper and idle cooldown. Stop IR tests first.");return;}
+    if(!canRefillWeek(nowMs())){web.send(409,"text/plain","A new week needs the refill reminder (or initial setup), a correct clock, verified stepper and idle cooldown. Stop IR tests first.");return;}
     if(!consumeToken())return;pauseSchedule("Recording a new seven-day pack.");
     // Preserve lockouts, including any attempt already recorded on this calendar date.
     if(!invalidatePending()){requireStorage();return;}
@@ -827,31 +902,37 @@ class PharmaVault {
   void startWeb(){
     web.on("/",HTTP_GET,[this]{if(!authorize())return;noCache();web.sendHeader("Content-Encoding","gzip");web.send_P(200,"text/html; charset=utf-8",reinterpret_cast<const char*>(PvDashboardGz),sizeof(PvDashboardGz));});web.on("/state",HTTP_GET,[this]{sendState();});web.on("/mascot.webp",HTTP_GET,[this]{if(!authorize())return;web.sendHeader("Cache-Control","private, max-age=86400");web.send_P(200,"image/webp",reinterpret_cast<const char*>(PvMascotWebp),sizeof(PvMascotWebp));});
     web.on("/test/mode",HTTP_POST,[this]{setIrTestMode();});
-    web.on("/clock",HTTP_POST,[this]{setClock();});web.on("/schedule/save",HTTP_POST,[this]{saveSchedule();});web.on("/schedule/mode",HTTP_POST,[this]{setScheduleMode();});
+    web.on("/clock",HTTP_POST,[this]{setClock();});web.on("/clock/auto",HTTP_POST,[this]{autoClock();});web.on("/schedule/save",HTTP_POST,[this]{saveSchedule();});web.on("/schedule/mode",HTTP_POST,[this]{setScheduleMode();});
     web.on("/stepper/save",HTTP_POST,[this]{saveStepper();});web.on("/stepper/jog",HTTP_POST,[this]{jogStepper();});web.on("/stepper/align",HTTP_POST,[this]{alignStepper();});
     web.on("/refill/instructions",HTTP_POST,[this]{saveRefillInstructions();});web.on("/week/refill",HTTP_POST,[this]{refillWeek();});web.on("/wifi",HTTP_POST,[this]{saveWifi();});web.on("/wifi/forget",HTTP_POST,[this]{forgetWifi();});web.on("/limits",HTTP_POST,[this]{saveLimits();});
     web.onNotFound([this]{if(!authorize())return;noCache();web.send(404,"text/plain","Not found");});web.begin();
   }
-  void printAccess(){Serial.println();Serial.println("PHARMAVAULT PBesp wireless 2 (local sensors)");Serial.println("ULN2003 IN1/2/3/4 = GPIO5/6/7/8; GPIO3 unused; IR OUT=GPIO14 at3.3V, LOW=hand, hold=1500ms.");Serial.println("Sensor link: FireBeetle wireless bridge on TCP 4210; S3 GPIO4/17 unused.");Serial.print("Wi-Fi name: ");Serial.println(apSsid);Serial.print("Wi-Fi password: ");Serial.println(accessPassword);Serial.println("Dashboard: http://pharmavault (or http://192.168.4.1)");Serial.println("Dashboard username: demo");Serial.print("Dashboard password: ");Serial.println(accessPassword);Serial.printf("Wi-Fi diag: channel=%u clients=%u/4 home network=%s (%s) uptime=%lus last reset=%d\n",unsigned(WiFi.channel()),unsigned(WiFi.softAPgetStationNum()),network.magic==NetworkMagic?network.ssid:"none saved",WiFi.status()==WL_CONNECTED?"connected":"not connected",static_cast<unsigned long>(millis()/1000),int(esp_reset_reason()));if(WiFi.status()==WL_CONNECTED){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}}
-  void printDiagnostics(){char line[260];snprintf(line,sizeof(line),"Daily: clock=%s day=%lu minute=%u enabled=%s position=%s slot=%u IR=%d armed=%s",clockSynced?"set":"unset",static_cast<unsigned long>(localDay()),unsigned(localMinute()),scheduleEnabled?"yes":"no",positionKnown?"known":"unknown",unsigned(currentSlot),int(irRaw),handArmed?"yes":"no");Serial.println(line);Serial.println(systemStatus(millis()));Serial.println(lastAction);Serial.println(irTestStatus(millis()));Serial.println(weekStatus());}
+  void printAccess(){Serial.println();Serial.println("PHARMAVAULT PBesp wireless 2 (local sensors)");Serial.println("ULN2003 IN1/2/3/4 = GPIO5/6/7/8; GPIO3 unused; IR OUT=GPIO14 at3.3V, LOW=hand, hold=1500ms.");Serial.println("Sensor link: FireBeetle wireless bridge on TCP 4210; S3 GPIO4/17 unused.");Serial.print("Wi-Fi name: ");Serial.println(apSsid);Serial.print("Wi-Fi password: ");Serial.println(accessPassword);Serial.println("Dashboard: http://pharmavault (or http://192.168.4.1)");Serial.println("Dashboard username: demo");Serial.print("Dashboard password: ");Serial.println(accessPassword);Serial.printf("Wi-Fi diag: channel=%u clients=%u/4 home network=%s (%s) uptime=%lus last reset=%d\n",unsigned(WiFi.channel()),unsigned(WiFi.softAPgetStationNum()),network.magic==NetworkMagic?network.ssid:"none saved",WiFi.status()==WL_CONNECTED?"connected":"not connected",static_cast<unsigned long>(nowMs()/1000),int(esp_reset_reason()));if(WiFi.status()==WL_CONNECTED){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}}
+  void printDiagnostics(){char line[260];snprintf(line,sizeof(line),"Daily: clock=%s day=%lu minute=%u enabled=%s position=%s slot=%u IR=%d armed=%s",clockSynced?"set":"unset",static_cast<unsigned long>(localDay()),unsigned(localMinute()),scheduleEnabled?"yes":"no",positionKnown?"known":"unknown",unsigned(currentSlot),int(irRaw),handArmed?"yes":"no");Serial.println(line);Serial.println(systemStatus(nowMs()));Serial.println(lastAction);Serial.println(irTestStatus(nowMs()));Serial.println(weekStatus());}
  public:
   void begin(){
+    startSysTick();                  // hardware timer 1: 1 ms system tick (ML)
     pinMode(RetiredServo,INPUT);pinMode(Step1,OUTPUT);pinMode(Step2,OUTPUT);pinMode(Step3,OUTPUT);pinMode(Step4,OUTPUT);writeCoils(0);
     pinMode(NtcSupplyPin,OUTPUT);digitalWrite(NtcSupplyPin,HIGH);  // 3.3 V for the NTC divider (max 0.33 mA)
-    pinMode(IrPin,INPUT_PULLUP);pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
+    pinMode(IrPin,INPUT_PULLUP);
+    static_assert(IrPin==IrTimerGpio,"IR timer ISR reads the IR pin directly");
+    irTimer=timerBegin(1000000);                       // hardware timer 0 at 1 MHz (ML)
+    timerAttachInterrupt(irTimer,&onIrTimer);          // run onIrTimer on each alarm (ML)
+    timerAlarm(irTimer,uint64_t(IrPollMs)*1000ULL,true,0);  // every 20 ms, auto-reload, forever (ML)
+    pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
     loadSettings();WiFi.onEvent([](arduino_event_id_t e,arduino_event_info_t info){if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)Serial.printf("WIFI client joined (aid %u)\n",unsigned(info.wifi_ap_staconnected.aid));else if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED)Serial.printf("WIFI client left (aid %u, reason %u)\n",unsigned(info.wifi_ap_stadisconnected.aid),unsigned(info.wifi_ap_stadisconnected.reason));else if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)Serial.printf("WIFI home network lost (reason %u)\n",unsigned(info.wifi_sta_disconnected.reason));else if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP)Serial.println("WIFI home network connected");});WiFi.mode(WIFI_AP_STA);WiFi.setSleep(false);WiFi.setAutoReconnect(false);snprintf(apSsid,sizeof(apSsid),"PharmaVault-%012llX",static_cast<unsigned long long>(ESP.getEfuseMac()&0xFFFFFFFFFFFFULL));
     const IPAddress ip(192,168,4,1),mask(255,255,255,0);apStarted=WiFi.softAPConfig(ip,ip,mask,IPAddress(uint32_t(0)),ip)&&WiFi.softAP(apSsid,accessPassword);if(apStarted)dns.start(53,"pharmavault",ip);if(MDNS.begin("pharmavault"))MDNS.addService("http","tcp",80);msp.begin(accessPassword);startWeb();if(network.magic==NetworkMagic)WiFi.begin(network.ssid,network.password);printAccess();
   }
   void run(){
-    serviceClock(millis());pollUart();updateDeadlines();updateWeek();serviceTimerTest(millis());serviceProviderReport(millis());
+    serviceClock(nowMs());pollUart();updateDeadlines();updateWeek();serviceTimerTest(nowMs());serviceProviderReport(nowMs());
     if(phase!=Phase::Idle){runMotion();delay(1);return;}
-    pollIr(millis());servicePillboxSensors(millis());
-    if(networkQueued){networkQueued=false;staRetryAt=millis();WiFi.disconnect(false,false);WiFi.begin(network.ssid,network.password);}
+    pollIr(nowMs());servicePillboxSensors(nowMs());
+    if(networkQueued){networkQueued=false;staRetryAt=nowMs();WiFi.disconnect(false,false);WiFi.begin(network.ssid,network.password);}
     const bool connected=WiFi.status()==WL_CONNECTED;if(connected&&!wasConnected){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}wasConnected=connected;
     // ponytail: one home-network attempt every 2 min; each attempt scans channels and briefly moves the PharmaVault AP.
-    if(network.magic==NetworkMagic&&!connected&&millis()-staRetryAt>=StaRetryMs){staRetryAt=millis();WiFi.begin(network.ssid,network.password);}
+    if(network.magic==NetworkMagic&&!connected&&nowMs()-staRetryAt>=StaRetryMs){staRetryAt=nowMs();WiFi.begin(network.ssid,network.password);}
     if(Serial.available()){const int c=Serial.read();if(c=='?')printAccess();else if(c=='i'||c=='I'||c=='n'||c=='N'||c=='u'||c=='U')printDiagnostics();}
-    web.handleClient();serviceClock(millis());serviceDaily(millis());serviceHand(millis());delay(1);
+    web.handleClient();serviceClock(nowMs());serviceDaily(nowMs());serviceHand(nowMs());delay(1);
   }
 };
 PharmaVault cabinet;

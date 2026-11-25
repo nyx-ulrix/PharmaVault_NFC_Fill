@@ -41,7 +41,7 @@ class PvPillboxSensors {
     pinMode(NtcPin,INPUT);
     analogReadResolution(12);
     analogSetPinAttenuation(NtcPin,ADC_11db);
-    dht_.begin();lastAt_=millis();hasSample=false;
+    dht_.begin();lastAt_=nowMs();hasSample=false;
   }
   bool due(uint32_t now)const{return now-lastAt_>=(hasSample?PeriodMs:StartupMs);}
   bool fresh(uint32_t now)const{return hasSample&&now-sampledAt<FreshMs;}
@@ -79,7 +79,7 @@ class PvPillboxSensors {
     if(temperatureX100==InvalidTemperature||rhX100==InvalidHumidity)flags|=4;
     if(temperatureX100!=InvalidTemperature&&(temperatureX100<MinDemoTemperature||temperatureX100>MaxDemoTemperature))flags|=1;
     if(rhX100!=InvalidHumidity&&rhX100>maxHumidity)flags|=2;
-    sampledAt=lastAt_=millis();hasSample=true;
+    sampledAt=lastAt_=nowMs();hasSample=true;
     return true;
   }
 };
