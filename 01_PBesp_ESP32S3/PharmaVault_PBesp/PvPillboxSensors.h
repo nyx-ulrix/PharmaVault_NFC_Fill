@@ -1,3 +1,4 @@
+/* Author: Clifton Ng Jun Heng (CN). Pillbox sensors: DHT11 (through the Adafruit DHT library in DHT.h/DHT.cpp, not our code), NTC thermistor on the ADC, IR. Revised 2026-11-25. */
 #ifndef PHARMAVAULT_PILLBOX_SENSORS_H
 #define PHARMAVAULT_PILLBOX_SENSORS_H
 #include <Arduino.h>

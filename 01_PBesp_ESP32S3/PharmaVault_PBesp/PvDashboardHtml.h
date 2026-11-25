@@ -1,3 +1,4 @@
+/* Author: Malcolm Liew Jia En (ML). Dashboard web UI. Revised 2026-11-25. */
 // Dashboard page served by the pillbox. Edit here, then run: python web/build_web.py
 // Kept out of the .ino so the Arduino prototype scanner never parses the page text.
 #ifndef PHARMAVAULT_DASHBOARD_HTML_H

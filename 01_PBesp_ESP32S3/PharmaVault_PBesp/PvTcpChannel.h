@@ -1,3 +1,4 @@
+/* Author: Xavier Poh (XP). Wireless transport (TCP channel, bridge core, wireless serial). Revised 2026-11-25. */
 #ifndef PHARMAVAULT_TCP_CHANNEL_H
 #define PHARMAVAULT_TCP_CHANNEL_H
 #include <Arduino.h>

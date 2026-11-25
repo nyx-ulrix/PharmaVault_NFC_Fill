@@ -1,3 +1,4 @@
+/* Author: Clifton Ng Jun Heng (CN). Main loop, Timer1_A tick and NFC scheduling, UART, LCD pages. Revised 2026-11-25. */
 /* PHARMAVAULT healthcare station - wireless provider release 1 (2026-11-17).
  * MSP430F5529 / TI CCS C99. NFC and Booster LCD/LEDs are local to this station.
  * The FireBeetle ESP32-E bridge connects on UCA0 P3.3 TX/P3.4 RX at9600.

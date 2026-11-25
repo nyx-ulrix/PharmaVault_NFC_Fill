@@ -1,9 +1,15 @@
 /* PHARMAVAULT PBesp wireless 2; independent patient pillbox. ESP32-S3 / Arduino-ESP32 core 3.x.
- * AI-assisted prototype. Team: record actual authors, changes and personal reflections.
+ * AI-assisted prototype. Team P1-7. Each section below is tagged with its author:
+ *   Malcolm Liew Jia En (ML): hardware timers, IR sampling ISR, clock sync, dashboard UI and mascot.
+ *   Xavier Poh (XP): dose schedule, dispensing state machine, motor control; wireless transport.
+ *   Choo Zhen Da (CZD): Wi-Fi access point, web server and HTTP endpoints; PV1 protocol.
+ *   Mohamed Afiq (MA): flash storage, dose history, serial console.
+ *   Clifton Ng Jun Heng (CN): pillbox sensors (DHT11, NTC thermistor ADC, IR).
  * Version history:
  *   wireless 2 (2026-11-17): independent pillbox release.
  *   2026-11-25, Malcolm Liew Jia En (ML): hardware-timer system tick and IR sampling
  *     (CEG2002 timer functions + ISRs); automatic clock sync from the dashboard.
+ *   2026-11-25, ML: load cell removed; author tags added from the team split.
  * 28BYJ-48 via ULN2003 IN1/2/3/4 -> GPIO5/6/7/8; IR OUT -> GPIO14 at3.3V.
  * Local sensors: GPIO1 ADC1 NTC10k/B3950; GPIO2 DHT11 DATA, both 3V3.
  * No servo is used. GPIO3 is an unused input; GPIO13 is driven HIGH to power the NTC divider; each station has its own local common ground.
@@ -82,6 +88,7 @@ static void IRAM_ATTR onIrTimer(){
 #error "Select ESP32S3 Dev Module. This sketch uses the S3 wiring map."
 #endif
 
+/* ---- PV1 protocol (copy of PvProtocol.h). Author: Choo Zhen Da (CZD) ---- */
 #ifndef PHARMAVAULT_PROTOCOL_H
 #define PHARMAVAULT_PROTOCOL_H
 
@@ -293,6 +300,7 @@ class PharmaVault {
   bool irStable(uint32_t now)const{return phase==Phase::Idle&&irFresh(now)&&now-irAt<=IrMaxGapMs&&now-irCandidateAt>=IrStableForMs;}
   void resetHandGesture(){handArmed=false;handClearSeen=false;handClearAt=0;}
   void invalidateIr(){irHasSample=false;irRaw=-1;irCandidateAt=0;resetHandGesture();}
+  // Author: Xavier Poh (XP): dose schedule.
   void pauseSchedule(const char *reason){
     if(irTestMode&&irTestCycles)positionKnown=false;
     irTestMode=false;timerTestMode=false;scheduleEnabled=false;resetHandGesture();lastAction=reason;
@@ -309,6 +317,7 @@ class PharmaVault {
       default:return "COMPLETED";
     }
   }
+  // Author: Xavier Poh (XP): dose schedule test mode.
   uint32_t timerTestSecondsUntil(uint32_t now,uint32_t duration)const{
     if(!timerTestMode||timerTestStage==TimerTestStage::Completed)return 0;
     const uint32_t passed=now-timerTestStartedAt;
@@ -341,6 +350,7 @@ class PharmaVault {
     return "TEST MODE READY: hold your hand for 1.5 seconds to advance one compartment.";
   }
   // Advance wall time from monotonic millis, including its rollover. No time survives loss of power.
+  // Author: Xavier Poh (XP): dose schedule clock.
   void serviceClock(uint32_t now){
     if(!clockSynced)return;
     const uint64_t delta=uint64_t(now-clockTick)+clockRemainder;clockTick=now;
@@ -356,6 +366,7 @@ class PharmaVault {
     switch(s){case DayState::Preparing:return "POSITIONING";case DayState::Ready:return "READY";case DayState::Attempted:return "ATTEMPTED";
       case DayState::Completed:return "COMPLETED";case DayState::Missed:return "MISSED";case DayState::Fault:return "FAULT";default:return "NOT_DUE";}
   }
+  // Author: Mohamed Afiq (MA): flash storage and dose history.
   bool saveBytes(const char *key,const void *data,size_t size){
     if(!storageOk)return false;if(prefs.putBytes(key,data,size)==size)return true;
     storageOk=false;pauseSchedule("Settings write failed. Automatic operation stopped; inspect and restart.");return false;
@@ -381,6 +392,7 @@ class PharmaVault {
     }
     return true;
   }
+  // Author: Xavier Poh (XP): weekly dose schedule.
   bool weekConfigured()const{return week.magic==WeekMagic&&week.firstDay!=0;}
   bool weekRefillDue()const{return weekConfigured()&&(week.flags&1);}
   uint8_t calendarSlot()const{
@@ -465,9 +477,11 @@ class PharmaVault {
     if(!irStable(now))return "Waiting for a steady IR signal.";
     return irRaw==IrHandLevel?"Hand/object detected at the outlet.":"Receiving area clear.";
   }
+  // Author: Choo Zhen Da (CZD): PV1 link status.
   bool readerFresh(uint32_t now)const{return msp.online()&&readerSeen&&now-readerAt<=ReaderFreshMs;}
   const char *nfcStatus(uint32_t now)const{if(!msp.online())return "Wireless FireBeetle bridge offline. Check its USB power and saved pairing; the MSP430 remains locally connected to the bridge.";return readerFresh(now)?"Tap the tag attached to this paired pillbox. The healthcare LCD shows status and all seven refill instructions; a tap never dispenses or resets the week.":"Waiting for the optional MSP430 weekly-status card reader.";}
 
+  // Author: Mohamed Afiq (MA): flash storage.
   void loadSettings(){
     storageOk=prefs.begin("pharmavault",false);strcpy(accessPassword,"PharmaVault67");  // fixed AP and dashboard password
     if(!storageOk)return;
@@ -522,9 +536,12 @@ class PharmaVault {
     if(labelsOk)refillText=loaded;
     // Old servo/contents settings are ignored. Physical position is unknown at boot.
   }
+  // Author: Xavier Poh (XP): motor control.
   void writeCoils(uint8_t mask){digitalWrite(Step1,mask&1?HIGH:LOW);digitalWrite(Step2,mask&2?HIGH:LOW);digitalWrite(Step3,mask&4?HIGH:LOW);digitalWrite(Step4,mask&8?HIGH:LOW);}
+  // Author: Choo Zhen Da (CZD): PV1 frames to the healthcare station.
   bool uartSend(const char *body){char frame[PV_FRAME_SIZE];const size_t n=pv_encode(body,frame,sizeof(frame));return n&&msp.availableForWrite()>=int(n)&&msp.write(reinterpret_cast<const uint8_t*>(frame),n)==n;}
   void sendLcd(const char *code,int slot){char body[64];snprintf(body,sizeof(body),"PV1,0,UI,%s,%d",code,slot);uartSend(body);}
+  // Author: Xavier Poh (XP): dispensing state machine and motor control.
   void finishMotion(){
     writeCoils(0);phase=Phase::Idle;finishedAt=nowMs();hadMotion=true;invalidateIr();
     if(motion==Motion::Dose){
@@ -575,6 +592,7 @@ class PharmaVault {
     if(!irHasSample||at-irAt>IrMaxGapMs){resetHandGesture();irCandidateAt=at;}else if(raw!=irRaw)irCandidateAt=at;
     irRaw=raw;irAt=at;irHasSample=true;
   }
+  // Author: Xavier Poh (XP): dose schedule and hand-triggered dispensing.
   void updateDeadlines(){
     if(!clockSynced||!storageOk)return;const uint32_t day=localDay();
     // Dates still pass while paused or powered off. Record absent past days as missed,
@@ -643,6 +661,7 @@ class PharmaVault {
     lastAction="Hand accepted. Today's attempt is recorded; rotating one compartment to release the pills.";
   }
 
+  // Author: Clifton Ng Jun Heng (CN): pillbox sensors.
   void servicePillboxSensors(uint32_t now){
     // Never delay a motor step or an already timed active hand hold for DHT.
     const bool canBlock=phase==Phase::Idle&&(!handArmed||irRaw!=IrHandLevel);
@@ -662,6 +681,7 @@ class PharmaVault {
     if(s==DayState::None&&!scheduleEnabled)return "PAUSED";
     return dayStateName(s);
   }
+  // Author: Choo Zhen Da (CZD): PV1 status reports.
   void serviceProviderReport(uint32_t now){
     if(!msp.online()){providerReportPart=0;return;}
     if(!providerReportPart&&!elapsed(now,providerReportAt,5000))return;
@@ -681,6 +701,7 @@ class PharmaVault {
       if(uartSend(body)){providerReportPart=0;providerReportAt=now;}
     }
   }
+  // Author: Mohamed Afiq (MA): flash storage.
   void saveRefillInstructions(){
     if(!setupRequest())return;
     RefillTextSettings updated{};updated.magic=RefillTextMagic;
@@ -696,6 +717,7 @@ class PharmaVault {
     refillText=updated;
     web.send(200,"text/plain","Refill instructions saved for Days 1-7. Retap the pillbox card to load the updated LCD guide. Daily times and pack dates are unchanged.");
   }
+  // Author: Choo Zhen Da (CZD): PV1 frame handling.
   void handleUart(char *line){
     char *f[8];const size_t n=pv_split(line,f,8);uint16_t seq;if(n<3||!pv_u16(f[1],&seq)||!seq)return;
     const char *answer="ACK,ERR,BAD_COMMAND";char refill[116];
@@ -735,6 +757,7 @@ class PharmaVault {
       else if(!overflow&&used<sizeof(line)-1&&c>=32&&c<=126)line[used++]=char(c);else overflow=true;
     }
   }
+  // Author: Choo Zhen Da (CZD): web server and HTTP endpoints.
   void noCache(){web.sendHeader("Cache-Control","no-store");}
   bool authorize(){if(web.authenticate("demo",accessPassword))return true;web.requestAuthentication(BASIC_AUTH,"PharmaVault");return false;}
   const char *activeToken(uint32_t now){if(phase!=Phase::Idle)return "";if(!token[0]||elapsed(now,tokenAt,TicketLifetimeMs)){randomHex(token);tokenAt=now;}return token;}
@@ -836,6 +859,7 @@ class PharmaVault {
     clockEpoch=parsed;clockTick=nowMs();clockRemainder=0;clockSynced=true;updateDeadlines();updateWeek();
     web.send(200,"text/plain",wasSynced?"Clock adjusted from this device.":"Clock set from this device.");
   }
+  // Author: Choo Zhen Da (CZD): web server and HTTP endpoints.
   void setClock(){
     if(!setupRequest())return;uint64_t parsed=0;if(!parseEpoch(parsed))return;
     if(!consumeToken())return;pauseSchedule("Clock changed. Check the displayed Singapore time and re-enable the scheduler.");
@@ -906,9 +930,12 @@ class PharmaVault {
     web.on("/refill/instructions",HTTP_POST,[this]{saveRefillInstructions();});web.on("/week/refill",HTTP_POST,[this]{refillWeek();});web.on("/wifi",HTTP_POST,[this]{saveWifi();});web.on("/wifi/forget",HTTP_POST,[this]{forgetWifi();});web.on("/limits",HTTP_POST,[this]{saveLimits();});
     web.onNotFound([this]{if(!authorize())return;noCache();web.send(404,"text/plain","Not found");});web.begin();
   }
+  // Author: Mohamed Afiq (MA): serial console.
   void printAccess(){Serial.println();Serial.println("PHARMAVAULT PBesp wireless 2 (local sensors)");Serial.println("ULN2003 IN1/2/3/4 = GPIO5/6/7/8; GPIO3 unused; IR OUT=GPIO14 at3.3V, LOW=hand, hold=1500ms.");Serial.println("Sensor link: FireBeetle wireless bridge on TCP 4210; S3 GPIO4/17 unused.");Serial.print("Wi-Fi name: ");Serial.println(apSsid);Serial.print("Wi-Fi password: ");Serial.println(accessPassword);Serial.println("Dashboard: http://pharmavault (or http://192.168.4.1)");Serial.println("Dashboard username: demo");Serial.print("Dashboard password: ");Serial.println(accessPassword);Serial.printf("Wi-Fi diag: channel=%u clients=%u/4 home network=%s (%s) uptime=%lus last reset=%d\n",unsigned(WiFi.channel()),unsigned(WiFi.softAPgetStationNum()),network.magic==NetworkMagic?network.ssid:"none saved",WiFi.status()==WL_CONNECTED?"connected":"not connected",static_cast<unsigned long>(nowMs()/1000),int(esp_reset_reason()));if(WiFi.status()==WL_CONNECTED){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}}
   void printDiagnostics(){char line[260];snprintf(line,sizeof(line),"Daily: clock=%s day=%lu minute=%u enabled=%s position=%s slot=%u IR=%d armed=%s",clockSynced?"set":"unset",static_cast<unsigned long>(localDay()),unsigned(localMinute()),scheduleEnabled?"yes":"no",positionKnown?"known":"unknown",unsigned(currentSlot),int(irRaw),handArmed?"yes":"no");Serial.println(line);Serial.println(systemStatus(nowMs()));Serial.println(lastAction);Serial.println(irTestStatus(nowMs()));Serial.println(weekStatus());}
  public:
+  // begin/run: shared start-up and main loop. Wi-Fi access point and reconnect: Choo Zhen Da (CZD);
+  // timer start-up: ML; serial console keys: MA; each module supplies its own service routine.
   void begin(){
     startSysTick();                  // hardware timer 1: 1 ms system tick (ML)
     pinMode(RetiredServo,INPUT);pinMode(Step1,OUTPUT);pinMode(Step2,OUTPUT);pinMode(Step3,OUTPUT);pinMode(Step4,OUTPUT);writeCoils(0);

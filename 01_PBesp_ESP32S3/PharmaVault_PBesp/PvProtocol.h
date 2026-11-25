@@ -1,3 +1,4 @@
+/* Author: Choo Zhen Da (CZD). PV1 frame protocol with CRC-16 (same design on all three boards). Revised 2026-11-25. */
 #ifndef PHARMAVAULT_PROTOCOL_H
 #define PHARMAVAULT_PROTOCOL_H
 
