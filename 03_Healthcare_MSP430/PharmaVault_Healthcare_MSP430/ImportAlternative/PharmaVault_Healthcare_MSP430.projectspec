@@ -9,8 +9,6 @@
     <file path="../main.c" action="copy" openOnCreation="true"/>
     <file path="../rc522.c" action="copy"/>
     <file path="../rc522.h" action="copy"/>
-    <file path="../hx711.c" action="copy"/>
-    <file path="../hx711.h" action="copy"/>
     <file path="../PvProtocol.h" action="copy"/>
     <file path="../targetConfigs/MSP430F5529.ccxml" action="copy" targetDirectory="targetConfigs"/>
   </project>

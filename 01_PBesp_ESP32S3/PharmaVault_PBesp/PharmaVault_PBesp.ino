@@ -249,7 +249,7 @@ class PharmaVault {
   // Day labels are historical snapshots; old firmware history remains readable.
   struct DailyRecord {uint32_t day,preparedAt,completedAt;uint8_t slot,state,overdue,reserved;char label[17];uint8_t padding[3];};
   struct DailyJournal {uint32_t magic,maxDay;DailyRecord records[SlotCount];};
-  static constexpr int64_t AutoClockMaxDriftS=120;static constexpr uint32_t StaRetryMs=120000,ScaleFreshMs=45000;uint32_t staRetryAt=0,scaleAt=0;int32_t scaleX10=0;bool scaleSeen=false;WebServer web{80};DNSServer dns;PvWirelessSerial msp;Preferences prefs;
+  static constexpr int64_t AutoClockMaxDriftS=120;static constexpr uint32_t StaRetryMs=120000;uint32_t staRetryAt=0;WebServer web{80};DNSServer dns;PvWirelessSerial msp;Preferences prefs;
   NetworkSettings network{};WeekSettings week{};
   char statusChunk[2200]{}; // Reused on the main loop; keep large status buffers off its stack.
   static constexpr uint32_t RefillTextMagic=0x50564D31;
@@ -721,7 +721,6 @@ class PharmaVault {
       snprintf(refill,sizeof(refill),"WEEK,%u,%s",unsigned(weekRefillDue()?7:weekDay()),status);answer=refill;
       nfcLastAction="Weekly status sent; the healthcare MSP430 fetches all seven saved refill instructions. Card taps never move the motor or confirm refill.";
     }else if(n==4&&!strcmp(f[2],"CLEAR")&&pv_uid_valid(f[3]))answer="ACK,OK,CARD_REMOVED";
-    else if(n==4&&!strcmp(f[2],"SCALE")){int32_t g=0;if(pv_i32(f[3],&g)&&g>=-100000&&g<=1000000){scaleX10=g;scaleAt=nowMs();scaleSeen=true;answer="ACK,OK,SCALE";}}  // Healthcare-station load cell, tenths of a gram
     char body[PV_FRAME_SIZE];snprintf(body,sizeof(body),"PV1,%u,%s",unsigned(seq),answer);uartSend(body);
   }
   void pollUart(){
@@ -783,7 +782,7 @@ class PharmaVault {
       "\"handArmed\":%s,\"handStatus\":\"%s\",\"nfcStatus\":\"%s\",\"nfcLastAction\":\"%s\",",
       raw,stable?"true":"false",age,static_cast<unsigned long>(irHasSample?now-irCandidateAt:0),unsigned(IrHandLevel),stable?(irRaw==IrHandLevel?"true":"false"):"null",
       irStatus(now),handArmed?"true":"false",handStatus(now),nfcStatus(now),nfcLastAction);json+=statusChunk;
-    snprintf(statusChunk,sizeof(statusChunk),"\"envFlags\":%u,\"tempMin\":%ld,\"tempMax\":%ld,\"rhMax\":%u,",unsigned(envFresh?environmentFlags:4),long(PvPillboxSensors::MinDemoTemperature),long(PvPillboxSensors::MaxDemoTemperature),unsigned(sensors.maxHumidity));json+=statusChunk;json+="\"scaleX10\":";json+=(scaleSeen&&!elapsed(now,scaleAt,ScaleFreshMs))?String(scaleX10):String("null");json+=",";json+="\"homeSsid\":";appendQuoted(json,network.magic==NetworkMagic?network.ssid:"");json+=",";json+="\"refillInstructions\":[";
+    snprintf(statusChunk,sizeof(statusChunk),"\"envFlags\":%u,\"tempMin\":%ld,\"tempMax\":%ld,\"rhMax\":%u,",unsigned(envFresh?environmentFlags:4),long(PvPillboxSensors::MinDemoTemperature),long(PvPillboxSensors::MaxDemoTemperature),unsigned(sensors.maxHumidity));json+=statusChunk;json+="\"homeSsid\":";appendQuoted(json,network.magic==NetworkMagic?network.ssid:"");json+=",";json+="\"refillInstructions\":[";
     for(uint8_t i=0;i<7;++i){if(i)json+=',';appendQuoted(json,refillText.text[i]);}
     json+="],\"today\":";appendRecord(json,recordFor(localDay()),localDay());json+=",\"history\":[";
     bool comma=false;for(uint8_t i=0;i<8;++i)if(journal.records[i].day){if(comma)json+=',';appendRecord(json,&journal.records[i],0);comma=true;}

@@ -39,7 +39,7 @@ VCC -> MSP4303.3V; GND -> MSP430GND
 MOSI -> P3.0 / H2.15; MISO -> P3.1 / H2.14
 SCK -> P3.2 / H2.7; SDA/SS -> P2.3 / H2.12; RST -> P1.6 / H2.5
 IRQ remains unused. LCD remains on its fitted Booster H3 connection.
-LaunchPad button S2 (P1.1) re-zeroes the load cell; no other buttons are used. LEDs remain P8.1/P8.2.
+No new buttons/switches are used. LEDs remain P8.1/P8.2.
 
 Remove the old NTC connection from P7.0/A12 and the DHT data connection from
 P1.5. Move their power, ground and signal wiring to the pillbox as specified

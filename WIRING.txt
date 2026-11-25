@@ -65,13 +65,6 @@ NFC RC522 - ORIGINAL MSP CONNECTIONS RETAINED
   RST -> P1.6 / H2.5.
   LCD -> existing fitted BoosterH3 connection; LEDs/power jumpers unchanged.
 
-LOAD CELL - XFW-HX711 MODULE AT THE HEALTHCARE STATION
-  HX711 VCC -> MSP target 3V3; HX711 GND -> MSP GND (3.3 V keeps DT logic safe).
-  HX711 DT  -> P1.5 / H2.38.   HX711 SCK -> P7.0 / H2.28 (Booster jumper J2 OPEN).
-  Load cell -> HX711: red E+, black E-, white A-, green A+ (swap A-/A+ if weight reads negative).
-  Power up with the platform EMPTY: the firmware tares (zeroes) on its first 8 readings.
-  To re-zero later, empty the platform and press LaunchPad button S2 (P1.1). No wiring needed.
-
 C. REMOVE THE OLD BETWEEN-STATION WIRES
   Remove MSP P3.3 -> S3GPIO4 and S3GPIO17 -> MSP P3.4.
   After moving motor power and all pillbox sensors locally as above, remove
