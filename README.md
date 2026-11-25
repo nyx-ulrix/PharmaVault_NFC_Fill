@@ -11,7 +11,7 @@ A smart pill dispenser in two parts that talk over Wi-Fi:
 [ESPmsp FireBeetle] <-- UART 9600 8N1 --> [MSP430 + RC522 + LCD]
 ```
 
-The pillbox makes its own Wi-Fi access point, so no router is needed. Each station only needs its own USB power. No wires run between the two stations.
+The pillbox makes its own Wi-Fi access point. The healthcare station exchanges data with the pillbox over that network. For a physically independent pillbox, power the driver from a pillbox-local 5 V supply that maintains its voltage under motor load. If you use the MSP430 Booster to power the motor during a bench test, follow the shared-ground connection in `WIRING.txt`.
 
 ## Repository layout
 
@@ -19,13 +19,11 @@ The pillbox makes its own Wi-Fi access point, so no router is needed. Each stati
 | --- | --- | --- |
 | `01_PBesp_ESP32S3/PharmaVault_PBesp/` | Pillbox firmware and dashboard | ESP32S3 Dev Module, Arduino IDE |
 | `02_ESPmsp_FireBeetle/PharmaVault_ESPmsp/` | Wi-Fi to UART bridge | FireBeetle 2 ESP32-E, Arduino IDE |
-| `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430/` | Healthcare station firmware (CCS project, prebuilt `.out`/`.hex` in `Firmware/`) | MSP430F5529, Code Composer Studio |
-| `04_WIRED_BACKUP/` | Earlier wired version (MSP430 and ESP32-S3 joined by UART) | See `04_WIRED_BACKUP/START_HERE.txt` |
-| `Validation/` | Build and test records | |
+| `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430/` | Healthcare station source, CCS project and target firmware | MSP430F5529, Code Composer Studio |
 
 **Editing the dashboard:** the page lives in `PvDashboardHtml.h`. After changing it (or `web/mascot.webp`), run `python 01_PBesp_ESP32S3/PharmaVault_PBesp/web/build_web.py` to regenerate the gzipped copy the board serves. The build fails with a reminder if you forget.
 
-The detailed guides are the `.txt` files in the root: `START_HERE.txt`, `FRESH_PC_INSTALL.txt`, `WIRING.txt`, `TEST_AND_DEMO.txt`, `NORMAL_OPERATION.txt` and `WIRED_BACKUP_RESTORE.txt`.
+Use `WIRING.txt` for the pin map and `TEST_AND_DEMO.txt` for bench checks. Driver and toolchain references are in `SOURCES.txt`. The [archived wired edition with team credits](https://github.com/nyx-ulrix/PharmaVault_NFC_Fill/tree/ab0dd58c3d40fb02b74a938d62b9b5845f984edd/04_WIRED_BACKUP) remains accessible in Git history.
 
 ## Default passwords
 
@@ -65,7 +63,7 @@ Power everything off first. Full details are in `WIRING.txt`.
 | Part | Connection |
 | --- | --- |
 | ULN2003 IN1 to IN4 | GPIO5, 6, 7, 8 |
-| ULN2003 power | 5 V (USB VBUS) and GND of the S3 |
+| ULN2003 power | A verified pillbox-local 5 V rail and common S3/driver ground |
 | IR sensor | VCC 3V3, GND, OUT to GPIO14 (active LOW) |
 | NTC 10 kΩ B3950 | GPIO13 (firmware holds it at 3.3 V) to 10 kΩ fixed resistor to junction to NTC to GND. Junction to GPIO1 (ADC1_CH0) |
 | DHT11 | VCC 3V3, GND, DATA to GPIO2 |
@@ -96,9 +94,7 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 
 **Bridge:** open `02_ESPmsp_FireBeetle/PharmaVault_ESPmsp/PharmaVault_ESPmsp.ino` and choose board **FireBeetle 2 ESP32-E** (`esp32:esp32:dfrobot_firebeetle2_esp32e`). Upload, then open the Serial Monitor at 115200 baud with line ending **Newline**. Expect `PHARMAVAULT wireless bridge 1`.
 
-**MSP430 without CCS:** `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430/Firmware/PharmaVault_Healthcare_MSP430_gcc.hex` is built from the current source with TI's MSP430-GCC 9.3.1. Flash it with TI's MSP Flasher: `MSP430Flasher.exe -n MSP430F5529 -w PharmaVault_Healthcare_MSP430_gcc.hex -v -e ERASE_MAIN -z [RESET,VCC]`. The older `.out`/`.hex` are the original CCS build.
-
-**MSP430:** in CCS, use File > Import Projects and pick `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430` (import it once). Build it, then Run > Debug and press **Resume**. You can also load the prebuilt `.out` from `Firmware/` instead of building. Its console runs at 9600 baud and should show `PHARMAVAULT healthcare MSP430 ready (wireless provider 1)`.
+**MSP430:** in CCS, use File > Import Projects and pick `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430` once. Build, choose Run > Debug and press **Resume**. The healthcare project README describes the included firmware and loading options. Its USB application console runs at 9600 baud and should show `PHARMAVAULT healthcare MSP430 ready (wireless provider 1)`.
 
 ## 4. Pair the bridge (once)
 
@@ -111,7 +107,7 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 
 1. Connect the laptop to the `PharmaVault-...` Wi-Fi (password `PharmaVault67`). Windows may say "No Internet"; stay connected.
 2. Open **http://pharmavault** (type the `http://`, or the browser may search for it instead). If that fails, use http://192.168.4.1 and log in as `demo` / `PharmaVault67`.
-3. Sync the clock and set the daily dose time.
+3. Check that the dashboard shows the correct Singapore date and time. It requests clock sync from the browser when needed. Set the daily dose time and the later overdue alert time.
 4. Confirm the carousel's current compartment. Slot 8 is the empty parking position.
 5. Load the seven compartments, record the new pack, and type the Day 1 to Day 7 refill instructions.
 6. Enable the schedule.
@@ -121,7 +117,7 @@ Send `?` at any time to print the Wi-Fi name, the password and the dashboard add
 - At the daily time, that day's compartment becomes READY. The motor does not move yet.
 - Hold a hand over the IR sensor for 1.5 s, after it has seen nothing for 1 s. The carousel then turns one compartment.
 - Tilt the dispenser so the pills slide out of the exit slot.
-- One dose per day only. If no hand comes by the alert time, the dose is marked OVERDUE. After midnight it is marked MISSED, and the motor stays blocked until you realign it.
+- One scheduled attempt per day. At the alert time an eligible, uncollected dose becomes overdue and can still be collected until midnight. Inspect missed or uncertain doses and confirm the physical alignment before continuing. A completed entry records the commanded motor steps. The firmware cannot sense tilting, pill passage or ingestion.
 - After day 7, the dashboard asks for a weekly refill.
 - Tap the NFC tag on the RC522 reader to show the week's status and refill instructions on the LCD. A tap never dispenses anything.
 - Temperature (NTC) and humidity (DHT11) are read about every 5 s. Warnings show on the dashboard and the LCD.

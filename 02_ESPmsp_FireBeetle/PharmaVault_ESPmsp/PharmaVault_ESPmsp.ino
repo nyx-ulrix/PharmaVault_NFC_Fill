@@ -29,6 +29,7 @@ class PharmaVaultBridge {
   uint32_t connectAt_=0,wifiAt_=0,seenGeneration_=0,uartLineAt_=0;
   uint32_t uartFrames_=0,uartRejected_=0,uartDropped_=0;
 
+  // Print current pairing, link state and frame counters to the USB console.
   void status(){
     Serial.println("PHARMAVAULT wireless bridge 1");
     Serial.print("Paired SSID: ");Serial.println(configured_?pair_.ssid:"not configured");
@@ -40,11 +41,13 @@ class PharmaVaultBridge {
       static_cast<unsigned long>(link_.receivedFrames()),static_cast<unsigned long>(link_.sentFrames()),static_cast<unsigned long>(link_.rejectedFrames()));
     Serial.println("Commands (Newline): SETUP, ?, CANCEL, FORGET. Password is never printed.");
   }
+  // Discard an old session, then initiate a connection using the saved pair.
   void beginWifi(){
     link_.close();uartLine_.reset();
     WiFi.disconnect(false,false);connectAt_=millis()-2000;wifiAt_=millis();
     if(configured_){WiFi.begin(pair_.ssid,pair_.secret);Serial.print("Connecting to ");Serial.println(pair_.ssid);}
   }
+  // Consume one completed line from console_ according to the current pairing prompt.
   void consoleLine(){
     console_[consoleUsed_]=0;
     if(consoleOverflow_){Serial.println("Input too long; nothing saved. Try the current prompt again.");return;}
@@ -55,7 +58,7 @@ class PharmaVaultBridge {
       const size_t length=strlen(console_);
       if(!pvBridgeSsidValid(console_)){Serial.println("Enter the exact PharmaVault- plus 12 uppercase hexadecimal digits printed by the main S3, or CANCEL.");return;}
       memcpy(nextSsid_,console_,length+1);stage_=SetupStage::Password;
-      Serial.println("Type the main S3's Wi-Fi password (PharmaVault67), then Enter. It will not be echoed.");return;
+      Serial.println("Type the main S3's Wi-Fi password, then Enter. It will not be echoed.");return;
     }
     if(stage_==SetupStage::Password){
       if(!pvBridgeSecretValid(console_)){Serial.println("Expected the S3's Wi-Fi password (8 to 32 characters, no spaces). Try again, or CANCEL.");return;}
@@ -77,6 +80,7 @@ class PharmaVaultBridge {
     }
     if(consoleUsed_)Serial.println("Unknown command. Use SETUP or ? with Newline selected.");
   }
+  // Collect one line of serial input in bounded slices so UART forwarding can continue.
   void serviceConsole(){
     for(unsigned i=0;i<64&&Serial.available();++i){
       const int value=Serial.read();if(value=='\r')continue;
@@ -86,6 +90,7 @@ class PharmaVaultBridge {
       else consoleOverflow_=true;
     }
   }
+  // Use now (milliseconds since boot) to schedule Wi-Fi and TCP reconnect attempts.
   void serviceNetwork(uint32_t now){
     if(stage_!=SetupStage::Command||!configured_)return;
     if(WiFi.status()!=WL_CONNECTED){
@@ -101,6 +106,7 @@ class PharmaVaultBridge {
     }
     link_.poll(millis());
   }
+  // Exchange whole CRC-checked frames between UART2 and the active TCP session.
   void serviceUart(){
     // Discard bytes that belonged to a previous link session, including a partial
     // UART line. MSP retries/periodic sensor reports supply fresh requests.
@@ -124,6 +130,7 @@ class PharmaVaultBridge {
     }
   }
  public:
+  // Start both UARTs, restore the saved pair from flash and start station-mode Wi-Fi.
   void begin(){
     Serial.begin(115200);msp_.setRxBufferSize(1024);msp_.setTxBufferSize(256);msp_.begin(9600,SERIAL_8N1,UartRx,UartTx);
     storageOk_=prefs_.begin("pvbridge",false);
@@ -135,6 +142,7 @@ class PharmaVaultBridge {
     WiFi.mode(WIFI_STA);WiFi.setAutoReconnect(true);beginWifi();status();
     if(!configured_)Serial.println("First use: type SETUP and follow the two prompts.");
   }
+  // Advance the console, Wi-Fi and UART state machines once, then yield to Wi-Fi tasks.
   void run(){
     serviceConsole();serviceNetwork(millis());serviceUart();
     const bool online=link_.online();
@@ -143,5 +151,7 @@ class PharmaVaultBridge {
   }
 };
 PharmaVaultBridge bridge;
+// Arduino entry point for initialising the bridge after power-up.
 void setup(){bridge.begin();}
+// Arduino repeats this single nonblocking service pass while the board is powered.
 void loop(){bridge.run();}

@@ -160,11 +160,20 @@ let state = null, token = '', busy = false, firstState = true, connected = false
 /* autoSyncClock: once per connection, sends this device's time to /clock/auto if the pillbox
  * clock is unset or more than 2 s off. No arguments. Author: Malcolm Liew Jia En (ML) */
 async function autoSyncClock(){
+  if(clockAutoSent||!state||busy)return;
   const now=Math.floor(Date.now()/1000);
-  if(!state||!token||busy||(state.clockSynced&&Math.abs(now-Number(state.epoch))<=2))return;
+  if(state.clockSynced&&Math.abs(now-Number(state.epoch))<=2){clockAutoSent=true;return;}
+  if(!token)return; // An action is in flight. Retry with the next idle status.
   const usedToken=token;token='';
-  try{const r=await fetchTimed('/clock/auto',{method:'POST',body:new URLSearchParams({epoch:now,token:usedToken})});
-    if(!r.ok||!state.clockSynced)el('clockMessage').textContent=await r.text();}catch(e){}
+  try{
+    const r=await fetchTimed('/clock/auto',{method:'POST',body:new URLSearchParams({epoch:now,token:usedToken})});
+    const message=await r.text();
+    // A stale token (409) or lost reply will be retried after the next status poll.
+    clockAutoSent=r.ok||r.status===400||r.status===422;
+    if(!r.ok||!state.clockSynced)el('clockMessage').textContent=message;
+  }catch{
+    el('clockMessage').textContent='Clock sync interrupted. Retrying when the pillbox is available.';
+  }
 }
 let irDisplayTimer = null, connectionFailed = false;
 let instructionsDirty=false;
@@ -381,8 +390,10 @@ async function refresh() {
     try {
       const started=performance.now();const response=await fetchTimed('/state',{cache:'no-store'});
       if(!response.ok)throw new Error('Status unavailable');
-      state=await response.json();token=state.token;connected=true;connectionFailed=false;
-      if(!clockAutoSent){clockAutoSent=true;autoSyncClock();}  // sync once per connection (ML)
+      const nextState=await response.json();
+      if(state?.clockSynced&&!nextState.clockSynced)clockAutoSent=false; // Device restarted between polls.
+      state=nextState;token=state.token;connected=true;connectionFailed=false;
+      await autoSyncClock();
       const latency=Math.max(0,Math.ceil(performance.now()-started));
       if(Number.isFinite(state.irAgeMs)&&state.irAgeMs>=0)state.irAgeMs+=latency;
       el('temp').textContent=state.temp===null?'Unavailable':(state.temp/100).toFixed(1)+' °C';

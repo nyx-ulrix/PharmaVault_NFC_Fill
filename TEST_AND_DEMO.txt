@@ -11,14 +11,21 @@ MSP must be running/resumed, not halted in the debugger.
 2. PILLBOX SENSORS WITHOUT PROVIDER
 Temporarily unplug only the FireBeetleUSB. Open PBesp dashboard from the laptop.
 Temperature/humidity should continue updating locally. PBesp prints:
-  PB SENSORS NTC_mV=...,temp_x100=...,rh_x100=...,DHT_temp_x100=...,flags=...
+  PB SENSORS NTC_mV=...,temp_x100=...,rh_x100=...,DHT_temp_x100=...,flags=...,NTC_raw12=...,DHT_frame=...
 temp_x100=2500 means25.00C; rh_x100=5000 means50.00%RH.
 The thermistor is preconfigured10k/B3950, fixed10k. New ADC uses calibrated
 millivolts, so its numeric raw diagnostic differs from the MSP ADC output.
 Touch the NTC briefly: its reading should trend upward. A disconnected sensor
 must become unavailable/fault rather than a plausible zero. Restore it with
-power off before continuing. Demo warnings are below20C/above30C orRH>60%.
-Those thresholds are demonstration settings, not medication-specific advice.
+power off before continuing. Demo temperature limits are 20 to 30 C.
+Humidity warns above the configured threshold (factory default 95% RH).
+Pause the daily schedule and stop both motor test modes for raw IR checks.
+With no hand, record GPIO14 HIGH (1). With a hand, record LOW (0). The Test
+screen shows the GPIO state. Keep actual screenshots or serial logs.
+For NTC characterization, place a reference thermometer beside the NTC.
+At each stable condition, record the reference temperature, divider mV, NTC
+temperature, and signed error (NTC minus reference). Record the reference
+instrument and its uncertainty. Repeat with a different stable temperature.
 
 3. RADIO AND PROVIDER READINGS
 Reconnect FireBeetle. It should restore its saved pair automatically.
@@ -38,6 +45,7 @@ and backslashes are rejected. Commas/semicolons are permitted.
 5. TAP THE TAG ATTACHED TO THE BOX
 Remove the card from the reader for1s, then bring the reader/card together.
 The MSP requests that paired pillbox's weekly status and seven saved daytexts.
+Capture the MSP430 USB console line beginning with UID at 9600 baud.
 Watch the LCD's DayN refill pages. Each16-character segment is shown about2.5s;
 all seven days are displayed once, then normal monitoring resumes.
 Blank instructions show Not set. Change one day on the dashboard, save, retap

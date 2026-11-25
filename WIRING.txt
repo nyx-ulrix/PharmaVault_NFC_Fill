@@ -1,5 +1,5 @@
 PHARMAVAULT - FINAL INDEPENDENT-STATION WIRING
-17 November 2026
+Reviewed 25 November 2026
 
 Power OFF every board before changing wires. Use printed GPIO/IO numbers,
 not physical header positions. PBesp=ESP32-S3; ESPmsp=original FireBeetle V1.0.
@@ -13,14 +13,13 @@ STEPPER (SIGNAL PINS UNCHANGED)
   ULN2003 IN4 -> PBesp GPIO8.
   28BYJ-48 motor plug -> ULN2003 white motor socket.
 
-MOTOR POWER - MOVE FROM MSP430 TO PILLBOX
-  Disconnect ULN2003 +/VCC from MSP Booster H2.21/5V.
-  Connect ULN2003 +/VCC -> PBesp's confirmed USB5V/VBUS pin.
-  Connect ULN2003 -/GND -> PBesp GND.
-  Use the existing USB power arrangement at PBesp. Never use3V3 or a GPIO as
-  motor power. A pin marked5V does not guarantee current under load: test the
-  existing USB cable/supply for resets during stepping. Do not disable brownout
-  protection to conceal a power drop. No new supply/component is assumed.
+MOTOR POWER
+  Independent pillbox: use a verified pillbox-local 5 V rail for ULN2003 +.
+  Connect ULN2003 - to the local supply ground and the S3 ground.
+  Use S3 USB 5V/VBUS only if it supports the motor while Wi-Fi remains stable.
+  Bench arrangement with MSP Booster power: ULN2003 + to H2.21 (5 V),
+  ULN2003 - to Booster GND, and S3 GND to that same ground. Keep positive
+  supplies separate. This bench arrangement physically links the stations.
 
 IR HAND SENSOR - UNCHANGED
   VCC -> PBesp3V3; GND -> PBespGND; OUT -> PBesp GPIO14.
@@ -69,10 +68,9 @@ C. REMOVE THE OLD BETWEEN-STATION WIRES
   Remove MSP P3.3 -> S3GPIO4 and S3GPIO17 -> MSP P3.4.
   After moving motor power and all pillbox sensors locally as above, remove
   the MSP-to-S3 GND jumper too. Do NOT remove the local MSP-to-FireBeetle GND.
-  There must be no positive power rail, sensor lead or signal jumper between
-  the two stations. Each station's own devices still share its local ground.
+  For the independent arrangement there are no inter-station wires. Keep a
+  common MSP/S3 ground for as long as the Booster powers the pillbox motor.
 
-All existing parts are retained except the already retired servos/ultrasonic.
 Original FireBeetle V1.0 pinout source:
 https://dfimg.dfrobot.com/nobody/wiki/fd28d987619c16281bdc4f40990e5a1c.PDF
 S3 ADC1/GPIO1 source:

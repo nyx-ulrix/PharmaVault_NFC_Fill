@@ -44,7 +44,7 @@ static bool reader_ready;
 static bool spi_failed;
 static bool transceive_silent, scan_absent;
 
-/* Shift one byte on UCB0. A bounded wait protects against a stopped clock. */
+/* Transmit value on UCB0, returning the simultaneous receive byte. A timeout sets spi_failed. */
 static uint8_t spi_transfer(uint8_t value)
 {
     uint16_t remaining = 256;
@@ -228,6 +228,7 @@ static void halt_card(void)
     (void)transceive(frame, 4, 0, 0, 0);
 }
 
+/* Configure the reader's pins, SPI, RF timer and antenna. Return true after register readback. */
 bool rc522_init(void)
 {
     uint8_t version;
@@ -275,6 +276,7 @@ bool rc522_init(void)
     return reader_ready;
 }
 
+/* Check version and configured RF registers. Return false on missing hardware or SPI timeout. */
 bool rc522_healthy(void)
 {
     uint8_t version;
@@ -286,8 +288,11 @@ bool rc522_healthy(void)
            (read_register(REG_TX_CONTROL) & 0x03u) == 0x03u && !spi_failed;
 }
 
+/* Report whether the last wakeup probe timed out cleanly. Collisions do not establish absence. */
 bool rc522_no_card(void) {return scan_absent;}
 
+/* Poll a card into the caller's ten-byte uid buffer. On success uid_len is 4, 7 or 10;
+ * on failure it is zero. Only a completely selected card supplies a UID to the application. */
 bool rc522_scan(uint8_t uid[10], uint8_t *uid_len)
 {
     const uint8_t wakeup = 0x52u;

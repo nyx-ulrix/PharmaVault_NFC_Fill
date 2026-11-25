@@ -1,12 +1,12 @@
 PHARMAVAULT HEALTHCARE STATION - MSP430F5529
-Wireless provider release1, 17 November2026
+Wireless provider firmware, 25 November 2026
 
 THIS IS THE NEW HEALTHCARE-STATION FIRMWARE
 The MSP430 now owns only the RC522 reader and fitted Booster LCD/LEDs.
 Temperature, humidity, IR and the motor belong to the separate ESP32-S3 pillbox.
 The FireBeetle ESP32-E beside the MSP430 relays remote messages over Wi-Fi.
 Use this project with the accompanying independent-stations S3 and bridge
-sketches. The wired backup's older MSP430 firmware has different sensor roles.
+sketches.
 
 INSTALL IN CCS
 1. Extract the entire package to a normal local folder before opening it.
@@ -20,12 +20,13 @@ INSTALL IN CCS
 4. Build the project, start Debug/load and Resume/Run.
    Only main.c and rc522.c are source files to compile. No external DHT library
    or ThermistorConfig.h is required by this new MSP430 role.
-5. If your CCS target is already configured, the prebuilt target-compiled
-   Firmware/PharmaVault_Healthcare_MSP430.out can instead be loaded directly
-   through Load Program, then Resume/Run. The .hex is also included.
+5. To flash the verified build using a configured CCS target, use Load Program
+   and select Firmware/PharmaVault_Healthcare_MSP430.out, then Resume/Run.
+   An Intel HEX copy from the same build is included for compatible programmers.
 6. Connect the MSP430 application/backchannel COM port at9600 baud,8N1.
-   After reset, look for exactly:
+   Open the console, resume the MCU and reset it. This submission prints:
    PHARMAVAULT healthcare MSP430 ready (wireless provider 1)
+   MSP firmware 2026-11-25: complete refill snapshots
 
 LOCAL CONNECTIONS - POWER OFF BEFORE CHANGING WIRES
 MSP430 P3.3 / Booster H2.4 TX -> FireBeetle D11 / GPIO16 RX2
@@ -68,6 +69,11 @@ NFC REFILL GUIDE
 4. After all seven are received, the LCD shows DayN refill on the first row.
    The second row shows16 characters at a time, changing about every2.5s.
    All seven days appear once, then the normal environment/status view resumes.
+   If a live lookup fails, "Saved copy" introduces the last complete list kept
+   in RAM. Each of its pages is headed "Day N saved". Confirm the current refill
+   instructions on the connected dashboard before using a saved list.
+   Power loss clears this copy. Without a complete prior list the LCD shows
+   "No saved info".
 5. Remove the card for at least one second before tapping again to repeat.
    A new card cancels the old list. New warnings can interrupt the list; a
    steady warning does not continuously cover the text on a subsequent tap.
@@ -75,14 +81,16 @@ NFC REFILL GUIDE
    resets weekly progress. Refill physically, then confirm it on the dashboard.
    The instructions do not measure remaining stock or prove a pill was taken.
 
-SERIAL DIAGNOSTICS AT9600
+SERIAL DIAGNOSTICS AT 9600 BAUD (illustrative formats)
 PB_ENV temp_x100=2450,rh_x100=5300,flags=0 ->24.50C,53.00%RH
 PB_BOX day=2,state=READY,overdue=0,refill=0 ->current pillbox status
 UID <card UID>
 Week day N: ACTIVE (also SETUP,REFILL,CLOCK)
 Refill day N: <configured instruction>
-No reply/Refill link error ->check bridge pairing, local UART cross-connections
-and the S3 wireless firmware. Retap after the link is restored.
+To capture the real UID for the report, start the backchannel console, remove
+the card for one second and tap again. Save the line beginning with "UID ".
+If "No saved info" / "No reply" appears, check bridge pairing, UART pin
+connections and the pillbox. Retap after the link is restored.
 
 IMPLEMENTATION
 Timer1_A supplies the10ms tick; UART RX/TX use interrupt buffers; the CPU uses

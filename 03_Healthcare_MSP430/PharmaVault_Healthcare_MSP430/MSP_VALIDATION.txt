@@ -1,50 +1,35 @@
-PHARMAVAULT HEALTHCARE MSP430 - VALIDATION
-17 November2026
+Healthcare station verification, 25 November 2026
 
-NATIVE TARGET BUILD: PASS
-TI MSP430 compiler21.6.2.LTS, MSP430F5529, C99, small code/data model.
-main.c and rc522.c compiled and linked without diagnostics. The included
-Firmware .out/.hex exactly match these freshly generated target artifacts.
-RAM allocation 1842/8192 bytes; main FLASH allocation
-16033/48000 bytes. Stack512/heap160 reserved by linker.
+Target build
+TI MSP430 compiler and linker 21.6.2.LTS compiled main.c and rc522.c for
+MSP430F5529. Options included C99, MSP430X small code and small data, O2
+and no floating-point printf. Linking used lnk_msp430f5529.cmd, the TI
+runtime, 512 bytes reserved for stack and 160 bytes reserved for heap.
+The linker and Intel HEX conversion both completed successfully.
 
-ACTUAL-SOURCE HOST TESTS: PASS
-check.cpp
-PASS: remote ENV range/sentinel/CRC/shape/sequence validation, independent 16s expiry, recovery and rollover.
-PASS: strict BOX whitelist/day/boolean fields, independent status expiry, aggregate missed/overdue and simultaneous refill display; no first-packet false offline warning.
-PASS: TEST_OVERDUE is an explicit demo-only LCD warning, interrupts a new refill lookup, clears on TEST, and never creates a real overdue flag.
-PASS: matching TAG/WEEK starts seven sequential MED requests; 1/16/17/32/33/48-character text paginates at16 chars every2.5s and ends after exactly one list cycle.
-PASS: MED wrong sequence/day/CRC/shape/hex, unawaited/duplicate replies and command errors cannot corrupt a refill list.
-PASS: existing700ms/three-attempt retry semantics, failed lookup cleanup, new-warning interruption, steady-warning readability and stale-link cache rejection.
-PASS: MED cancellation compacts wrapped command rings without losing unrelated reader/card commands or their active acknowledgement state.
-PASS: real reader debounce preserves one lookup per presentation, one-second removal/retap, replacement-card cancellation and queued-tap rollover expiry.
-PASS: actual UART-ring receiver processes framed status and resynchronizes on receive faults.
-All healthcare MSP430 actual-source host tests passed.
+The map allocated 2,224 of 8,192 bytes in the RAM region and 16,291 of
+48,000 bytes in the main FLASH region. Interrupt vectors are separate
+regions. These are linker region sizes for this build.
 
+Firmware image checksums (SHA-256)
+EF330048E7D438D0EBAE1140F8056D4C1012821BE3EFE42CB3EE4D8AF839EF6A  PharmaVault_Healthcare_MSP430.hex
+8DEDA74771666F2745615CCAB20A73895809A03FF767D22AEA960B61463BE6FE  PharmaVault_Healthcare_MSP430.out
 
-INTEGRITY CHECKS
-RC522 driver/header, CRC protocol and linker script match the wired backup.
-New CCS project has a distinct name and no DHT/thermistor source dependencies.
-Source initializes only Timer1_A and UART interrupt paths; no ADC12 control
-registers, local ADC ISR, DHT include, or obsolete TA0 sequence seed remains.
-Real hardware clock/UART/LCD/RC522 implementation is compiled by TI, while the
-host harness extracts actual protocol/queue/reader/LCD-service functions and
-mocks peripheral registers, card presence, ticks and LCD character output.
-
-EVIDENCE
-work/wireless-provider-msp/build-source.py
-work/wireless-provider-msp/build-native.py
-work/wireless-provider-msp/native-build/build.log
-work/wireless-provider-msp/build-tests.py
-work/wireless-provider-msp/host-tests/run.log
-work/wireless-provider-msp/write-docs.py
-
-LIMITS
-No physical CCS upload, LCD/card test, wireless RF test or sensor measurement
-was performed. Refill names are manually configured instructions for the
-paired pillbox, not live stock sensing or verified medicine administration.
-
-SHA256
-456C75B5EC8D6809882209720020E07825111680E7164F4CCE6AF62DF060B73F  main.c
-9E63E17C6F928D5DFCD4A27F77C22C3A6AE06212CC5A459778CF1487D349C075  Firmware/PharmaVault_Healthcare_MSP430.out
-8EF703F10A93EA3875752AF286AEACA5A1D309C8D475BF6B6F9508C3C6B5FD9C  Firmware/PharmaVault_Healthcare_MSP430.hex
+Host simulation
+Ten groups of tests exercised the current C functions using simulated
+serial frames, card presence, clocks, LCD feedback and interrupt registers:
+  1. Environment frame validation, expiry, recovery and tick rollover.
+  2. Pillbox state validation and independent warning freshness.
+  3. Test-only overdue display and return to normal test mode.
+  4. Seven matching refill replies and 16-character LCD pagination.
+  5. Malformed, duplicate and mismatched replies.
+  6. Retry, timeout, warning interruption and link loss.
+  7. Cancellation while the command queue wraps around.
+  8. Card presentation, removal, replacement and queued-tap expiry.
+  9. Serial reception and recovery after a receive fault.
+ 10. A failed refresh preserves the previous complete heading and all
+     seven instructions. Each fallback page says "saved"; a later complete
+     refresh replaces the entire list.
+All ten groups passed. UART interrupts, SPI signals and RF were simulated
+or outside the harness. No launch, card read, physical LCD observation or
+end-to-end test was performed on the team hardware during this review.

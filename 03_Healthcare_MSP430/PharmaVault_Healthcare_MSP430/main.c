@@ -8,7 +8,8 @@
  * Seven medicine texts are fetched sequentially and shown in16-character pages.
  * Timer1_A, UART RX/TX ISRs and LPM0 retain interrupt-driven low-power operation.
  * No local ADC, DHT input or motor is initialized by this healthcare firmware.
- * AI-assisted reference. Team: record actual authors and verified adaptations.
+ * A complete refill list is held in RAM for an explicitly marked offline view.
+ * Revisions and team attribution: see this project's Git history. AI assisted.
  */
 #include <msp430.h>
 #include <stdbool.h>
@@ -81,8 +82,8 @@ static bool refill_fetch_active, refill_request_pending;
 static uint8_t refill_next_day, refill_page_day, refill_page_chunk;
 static bool idle_status_page;
 /* Last complete WEEK + Day 1..7 answer. Shown whenever a live tap lookup fails. RAM only. */
-static char cached_week[17], cached_text[7][49];
-static bool cache_valid;
+static char pending_week[17], cached_week[17], cached_text[7][49];
+static bool cache_valid, showing_saved_copy;
 
 /* Configure nominal MCLK 4.194304 MHz, SMCLK 1.048576 MHz, ACLK 32.768 kHz. */
 static void clocks_init(void)
@@ -278,10 +279,12 @@ static void cancel_refill_lookup(void)
     command_count = kept;
     if (removed_head) { waiting_ack = false; attempts = 0; }
     refill_fetch_active = refill_request_pending = refill_view_active = false;
+    showing_saved_copy = false;
     refill_next_day = refill_page_day = refill_page_chunk = 0;
     memset(refill_text, 0, sizeof refill_text);
 }
 
+/* Begin a new seven-day fetch. Keep the last complete snapshot available on failure. */
 static void start_refill_lookup(void)
 {
     cancel_refill_lookup();
@@ -289,7 +292,7 @@ static void start_refill_lookup(void)
     refill_next_day = 1;
 }
 
-/* Page through the saved copy instead of an error. Live data replaces it when it arrives. */
+/* Display the last complete snapshot; reason is the short LCD explanation if none exists. */
 static void show_cached(const char *reason)
 {
     cancel_refill_lookup();
@@ -300,6 +303,7 @@ static void show_cached(const char *reason)
     }
     memcpy(refill_text, cached_text, sizeof refill_text);
     refill_view_active = true;
+    showing_saved_copy = true;
     refill_page_day = refill_page_chunk = 0;
     refill_hold_until = tick_now() + REFILL_HOLD_TICKS;
     display(cached_week, "Saved copy", 250);
@@ -307,6 +311,7 @@ static void show_cached(const char *reason)
     debug_write("NFC: live lookup unavailable, showing saved copy.\r\n");
 }
 
+/* Queue one MED request at a time. The caller passes its tick; replies advance the day. */
 static void service_refill(uint32_t now)
 {
     char day[3], second[17];
@@ -320,6 +325,7 @@ static void service_refill(uint32_t now)
     display("Reading refill", second, 100);
 }
 
+/* Accept only protocol-defined pillbox state names before copying text to box_state. */
 static bool box_state_valid(const char *text)
 {
     static const char *const states[] = {
@@ -332,11 +338,13 @@ static bool box_state_valid(const char *text)
     return false;
 }
 
+/* Return whether the last environment frame is still current at foreground tick now. */
 static bool environment_fresh(uint32_t now)
 {
     return remote_environment_seen && !due(now, remote_environment_tick + REMOTE_FRESH_TICKS);
 }
 
+/* Return whether the last schedule/status frame is still current at foreground tick now. */
 static bool box_fresh(uint32_t now)
 {
     return remote_box_seen && !due(now, remote_box_tick + REMOTE_FRESH_TICKS);
@@ -362,6 +370,7 @@ static void receive_environment(char **fields)
     debug_write(debug_line);
 }
 
+/* Validate the split BOX frame's day, state and flags before refreshing its timestamp. */
 static void receive_box(char **fields)
 {
     uint16_t day, overdue, refill;
@@ -525,7 +534,7 @@ static void receive_frame(char *line)
         else return;
         display(first, second, 200);
         indicate(true);
-        strcpy(cached_week, first);
+        strcpy(pending_week, first); /* Publish this heading only after all seven matching replies. */
         snprintf(debug_line, sizeof debug_line, "Week day %ld: %s\r\n", (long)slot, fields[4]);
         debug_write(debug_line);
         finish_command();
@@ -545,6 +554,7 @@ static void receive_frame(char *line)
         refill_request_pending = false;
         if (slot < 7) ++refill_next_day;
         else {
+            strcpy(cached_week, pending_week);
             memcpy(cached_text, refill_text, sizeof cached_text);
             cache_valid = true;
             refill_fetch_active = false;
@@ -596,7 +606,7 @@ static void report_card(const uint8_t *uid, uint8_t length)
     text[2U * length] = '\0';
     if (!strcmp(held_uid, text)) return;
     debug_write("UID "); debug_write(text); debug_write("\r\n");
-    cancel_refill_lookup(); /* A newly presented card invalidates the old refill cache and requests. */
+    cancel_refill_lookup(); /* Cancel the pending request; the previous complete snapshot survives. */
     /* Do not defer lookup after queue overflow. Resynchronize and require a new tap.
      * A replacement card sends CLEAR before TAG; no LOGREQ may overwrite its name. */
     if (reader_resync_pending || command_count > COMMAND_CAPACITY - (held_uid[0] ? 2U : 1U)) {
@@ -731,7 +741,8 @@ static void service_lcd(uint32_t now)
     if (refill_view_active && !due(now, refill_hold_until) && refill_page_day < 7) {
         const size_t length = strlen(refill_text[refill_page_day]);
         const uint8_t pages = (uint8_t)((length + 15U) / 16U);
-        snprintf(first, sizeof first, "Day %u refill", (unsigned)refill_page_day + 1U);
+        snprintf(first, sizeof first, "Day %u %s", (unsigned)refill_page_day + 1U,
+                 showing_saved_copy ? "saved" : "refill");
         snprintf(second, sizeof second, "%.16s", refill_text[refill_page_day] + (unsigned)refill_page_chunk * 16U);
         display(first, second, REFILL_PAGE_TICKS);
         if (++refill_page_chunk >= pages) {
@@ -829,6 +840,7 @@ int main(void)
     next_reader_heartbeat = tick_now();
     display("PHARMAVAULT", reader_online ? "Tap a card" : "Check RFID wiring", 200);
     debug_write("PHARMAVAULT healthcare MSP430 ready (wireless provider 1)\r\n");
+    debug_write("MSP firmware 2026-11-25: complete refill snapshots\r\n");
     for (;;) {
         uint32_t now = tick_now();
         service_receive();

@@ -10,6 +10,7 @@
  *   2026-11-25, Malcolm Liew Jia En (ML): hardware-timer system tick and IR sampling
  *     (CEG2002 timer functions + ISRs); automatic clock sync from the dashboard.
  *   2026-11-25, ML: load cell removed; author tags added from the team split.
+ *   2026-11-25, AI-assisted review: retain sampled IR edges and retry interrupted dashboard clock syncs.
  * 28BYJ-48 via ULN2003 IN1/2/3/4 -> GPIO5/6/7/8; IR OUT -> GPIO14 at3.3V.
  * Local sensors: GPIO1 ADC1 NTC10k/B3950; GPIO2 DHT11 DATA, both 3V3.
  * No servo is used. GPIO3 is an unused input; GPIO13 is driven HIGH to power the NTC divider; each station has its own local common ground.
@@ -38,24 +39,24 @@
 #include <soc/gpio_reg.h>
 
 /* ---- Hardware timers (CEG2002 timer functions + timer ISRs). Author: Malcolm Liew Jia En (ML) ----
- * Timer 1, system tick (task scheduling): fires every 1 ms, like the MSP430 Timer1_A tick. Every
+ * System tick (task scheduling): a hardware timer fires every 1 ms. Every
  * schedule, timeout and the wall clock read nowMs(). The ISR copies the time from the
  * crystal-driven hardware counter (esp_timer), so a tick held off by a flash write still
- * catches up exactly and the dose clock never drifts.
- * Timer 0, IR hand sensor (event trigger): fires every 20 ms and latches the GPIO14 level and
- * its time; the main loop consumes each new sample and runs the hand-gesture rules on it. */
-static hw_timer_t *sysTimer=nullptr;                  // hardware timer 1 handle (ML)
+ * catches up with the device's monotonic clock after the interrupt resumes.
+ * IR hand sensor (event trigger): a second timer fires every 20 ms and latches the GPIO14
+ * level, latest transition and sample time. The main loop evaluates each uninterrupted hold. */
+static hw_timer_t *sysTimer=nullptr;                  // system tick timer handle (ML)
 static volatile uint32_t sysMs=0;                      // system time in ms, written only by the tick ISR (ML)
 
-/* onSysTick: timer-1 ISR, every 1 ms. No arguments. Refreshes sysMs from the hardware counter.
+/* onSysTick: system tick ISR, every 1 ms. No arguments. Refreshes sysMs from the hardware counter.
  * Author: Malcolm Liew Jia En (ML) */
 static void IRAM_ATTR onSysTick(){sysMs=uint32_t(esp_timer_get_time()/1000ULL);}   /* tick from hardware counter (ML) */
 
-/* nowMs: returns the current system time in ms (the timer-1 tick). Used in place of millis().
+/* nowMs: returns the current system time in ms. Used in place of millis().
  * Author: Malcolm Liew Jia En (ML) */
 static inline uint32_t nowMs(){return sysMs;}          // 32-bit read is atomic on the ESP32 (ML)
 
-/* startSysTick: configures hardware timer 1 at 1 MHz with a 1 ms auto-reload alarm.
+/* startSysTick: configures a hardware timer at 1 MHz with a 1 ms auto-reload alarm.
  * No arguments. Call first in begin(), before anything reads the time.
  * Author: Malcolm Liew Jia En (ML) */
 static void startSysTick(){
@@ -66,18 +67,22 @@ static void startSysTick(){
 }
 
 static constexpr uint8_t IrTimerGpio=14;                // IR sensor OUT pin read by the ISR (ML)
-static hw_timer_t *irTimer=nullptr;                     // hardware timer 0 handle (ML)
+static hw_timer_t *irTimer=nullptr;                     // IR sampling timer handle (ML)
 static portMUX_TYPE irMux=portMUX_INITIALIZER_UNLOCKED; // guards the ISR-shared sample (ML)
 static volatile int8_t irIsrLevel=-1;                   // latest level: 0 = LOW (hand), 1 = HIGH (clear) (ML)
 static volatile uint32_t irIsrAt=0,irIsrCount=0;        // sample time (ms) and sample counter (ML)
+static volatile uint32_t irLevelSince=0,irEdgeCount=0;  // start and identifier of the current uninterrupted level
 
-/* onIrTimer: timer-0 ISR, every 20 ms. No arguments. Reads GPIO14 straight from the GPIO input
+/* onIrTimer: IR sampling ISR, every 20 ms. No arguments. Reads GPIO14 straight from the GPIO input
  * register (ISR-safe), timestamps it with the system tick and publishes it to the main loop.
  * Author: Malcolm Liew Jia En (ML) */
 static void IRAM_ATTR onIrTimer(){
   const int8_t level=(REG_READ(GPIO_IN_REG)&(1UL<<IrTimerGpio))?1:0;   // direct register read (ML)
   const uint32_t at=sysMs;                                               // sample time from the tick (ML)
-  portENTER_CRITICAL_ISR(&irMux);irIsrLevel=level;irIsrAt=at;++irIsrCount;portEXIT_CRITICAL_ISR(&irMux);  // publish atomically (ML)
+  portENTER_CRITICAL_ISR(&irMux);
+  if(level!=irIsrLevel){irLevelSince=at;++irEdgeCount;}
+  irIsrLevel=level;irIsrAt=at;++irIsrCount;
+  portEXIT_CRITICAL_ISR(&irMux);
 }
 #include <WiFi.h>
 #include <Preferences.h>
@@ -280,7 +285,7 @@ class PharmaVault {
   char accessPassword[33]{},apSsid[32]{},token[33]{},lastUid[21]{};
   uint32_t tokenAt=0;
   int32_t temperature=-32768,humidity=65535;uint16_t environmentFlags=4;uint32_t environmentAt=0;bool environmentSeen=false;
-  int8_t irRaw=-1;bool irHasSample=false;uint32_t irAt=0,irCandidateAt=0,lastIrCount=0;
+  int8_t irRaw=-1;bool irHasSample=false;uint32_t irAt=0,irCandidateAt=0,lastIrCount=0,lastIrEdge=0;
   uint64_t clockEpoch=0;uint32_t clockTick=0,clockRemainder=0;
 
   static bool elapsed(uint32_t now,uint32_t then,uint32_t duration){return now-then>=duration;}
@@ -586,10 +591,18 @@ class PharmaVault {
    * Author: Malcolm Liew Jia En (ML) */
   void pollIr(uint32_t){
     if(phase!=Phase::Idle){invalidateIr();return;}                                          // ignore the sensor while the motor runs (ML)
-    int8_t raw;uint32_t at,count;
-    portENTER_CRITICAL(&irMux);raw=irIsrLevel;at=irIsrAt;count=irIsrCount;portEXIT_CRITICAL(&irMux);  // copy the ISR sample atomically (ML)
-    if(count==lastIrCount||raw<0)return;lastIrCount=count;                                 // only act on a new sample (ML)
-    if(!irHasSample||at-irAt>IrMaxGapMs){resetHandGesture();irCandidateAt=at;}else if(raw!=irRaw)irCandidateAt=at;
+    int8_t raw;uint32_t at,count,edge,start;
+    portENTER_CRITICAL(&irMux);
+    raw=irIsrLevel;at=irIsrAt;count=irIsrCount;edge=irEdgeCount;start=irLevelSince;
+    portEXIT_CRITICAL(&irMux);
+    if(count==lastIrCount||raw<0)return;
+    lastIrCount=count;
+    if(!irHasSample||at-irAt>IrMaxGapMs){
+      resetHandGesture();irCandidateAt=at; // Restart from a fresh sample after invalidation or a long gap.
+    }else if(edge!=lastIrEdge){
+      irCandidateAt=start;handClearSeen=false; // A sampled release and return can occur during one HTTP request.
+    }
+    lastIrEdge=edge;
     irRaw=raw;irAt=at;irHasSample=true;
   }
   // Author: Xavier Poh (XP): dose schedule and hand-triggered dispensing.
@@ -632,12 +645,12 @@ class PharmaVault {
   bool handGestureReady(uint32_t now){
     if(!canTest(now)||!irFresh(now)||now-irAt>IrMaxGapMs){resetHandGesture();return false;}
     if(irRaw==IrClearLevel){
-      if(!handClearSeen){handClearSeen=true;handClearAt=now;}
-      if(irStable(now)&&elapsed(now,handClearAt,HandClearMs))handArmed=true;
+      if(!handClearSeen){handClearSeen=true;handClearAt=irAt;}
+      if(irStable(now)&&elapsed(irAt,handClearAt,HandClearMs))handArmed=true;
       return false;
     }
     handClearSeen=false;
-    return irRaw==IrHandLevel&&handArmed&&irStable(now)&&elapsed(now,irCandidateAt,HandHoldMs);
+    return irRaw==IrHandLevel&&handArmed&&irStable(now)&&elapsed(irAt,irCandidateAt,HandHoldMs);
   }
   void serviceHand(uint32_t now){
     serviceTimerTest(now);
@@ -669,9 +682,14 @@ class PharmaVault {
     temperature=sensors.temperatureX100;humidity=sensors.rhX100;
     environmentFlags=sensors.flags;environmentAt=sensors.sampledAt;environmentSeen=true;
     invalidateIr(); // The DHT sample left a short gap in IR observation.
-    Serial.printf("PB SENSORS NTC_mV=%u,temp_x100=%ld,rh_x100=%ld,DHT_temp_x100=%ld,flags=%u\n",
+    char frameText[16]="unavailable";
+    if(sensors.dhtFrameValid){
+      const uint8_t *f=sensors.dhtFrame;
+      snprintf(frameText,sizeof(frameText),"%02X %02X %02X %02X %02X",f[0],f[1],f[2],f[3],f[4]);
+    }
+    Serial.printf("PB SENSORS NTC_mV=%u,temp_x100=%ld,rh_x100=%ld,DHT_temp_x100=%ld,flags=%u,NTC_raw12=%u,DHT_frame=%s\n",
       unsigned(sensors.ntcMillivolts),static_cast<long>(temperature),static_cast<long>(humidity),
-      static_cast<long>(sensors.dhtDiagnosticX100),unsigned(environmentFlags));
+      static_cast<long>(sensors.dhtDiagnosticX100),unsigned(environmentFlags),unsigned(sensors.ntcRaw12),frameText);
   }
   const char *providerBoxState()const{
     if(irTestMode)return timerTestMode&&timerTestStage==TimerTestStage::Overdue?"TEST_OVERDUE":"TEST";
@@ -855,7 +873,7 @@ class PharmaVault {
     const bool wasSynced=clockSynced;
     if(wasSynced){serviceClock(nowMs());const int64_t drift=int64_t(parsed)-int64_t(clockEpoch);
       if(drift>AutoClockMaxDriftS||drift<-AutoClockMaxDriftS){  // large jump: leave it to Sync clock (ML)
-        web.send(409,"text/plain","The pillbox clock differs from this device by more than 2 minutes. Check both, then use Sync clock in Settings.");return;}}
+        web.send(422,"text/plain","The pillbox clock differs from this device by more than 2 minutes. Check both, then use Sync clock in Settings.");return;}}
     clockEpoch=parsed;clockTick=nowMs();clockRemainder=0;clockSynced=true;updateDeadlines();updateWeek();
     web.send(200,"text/plain",wasSynced?"Clock adjusted from this device.":"Clock set from this device.");
   }
@@ -937,12 +955,12 @@ class PharmaVault {
   // begin/run: shared start-up and main loop. Wi-Fi access point and reconnect: Choo Zhen Da (CZD);
   // timer start-up: ML; serial console keys: MA; each module supplies its own service routine.
   void begin(){
-    startSysTick();                  // hardware timer 1: 1 ms system tick (ML)
+    startSysTick();                  // 1 ms system tick (ML)
     pinMode(RetiredServo,INPUT);pinMode(Step1,OUTPUT);pinMode(Step2,OUTPUT);pinMode(Step3,OUTPUT);pinMode(Step4,OUTPUT);writeCoils(0);
     pinMode(NtcSupplyPin,OUTPUT);digitalWrite(NtcSupplyPin,HIGH);  // 3.3 V for the NTC divider (max 0.33 mA)
     pinMode(IrPin,INPUT_PULLUP);
     static_assert(IrPin==IrTimerGpio,"IR timer ISR reads the IR pin directly");
-    irTimer=timerBegin(1000000);                       // hardware timer 0 at 1 MHz (ML)
+    irTimer=timerBegin(1000000);                       // IR sampling timer at 1 MHz (ML)
     timerAttachInterrupt(irTimer,&onIrTimer);          // run onIrTimer on each alarm (ML)
     timerAlarm(irTimer,uint64_t(IrPollMs)*1000ULL,true,0);  // every 20 ms, auto-reload, forever (ML)
     pinMode(UartRx,INPUT);pinMode(UartTx,INPUT);Serial.begin(115200);sensors.begin();
@@ -958,7 +976,7 @@ class PharmaVault {
     // ponytail: one home-network attempt every 2 min; each attempt scans channels and briefly moves the PharmaVault AP.
     if(network.magic==NetworkMagic&&!connected&&nowMs()-staRetryAt>=StaRetryMs){staRetryAt=nowMs();WiFi.begin(network.ssid,network.password);}
     if(Serial.available()){const int c=Serial.read();if(c=='?')printAccess();else if(c=='i'||c=='I'||c=='n'||c=='N'||c=='u'||c=='U')printDiagnostics();}
-    web.handleClient();serviceClock(nowMs());serviceDaily(nowMs());serviceHand(nowMs());delay(1);
+    web.handleClient();serviceClock(nowMs());serviceDaily(nowMs());pollIr(nowMs());serviceHand(nowMs());delay(1);
   }
 };
 PharmaVault cabinet;
