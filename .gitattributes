@@ -1,0 +1,3 @@
+# Preserve the exact bytes produced by TI's tools and listed in MSP_VALIDATION.txt.
+*.hex binary
+*.out binary

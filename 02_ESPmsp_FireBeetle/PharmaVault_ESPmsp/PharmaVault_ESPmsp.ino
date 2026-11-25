@@ -100,8 +100,7 @@ class PharmaVaultBridge {
     }
     if(!link_.attached()&&now-connectAt_>=2000){
       connectAt_=now;WiFiClient connection;
-      // Only the sensor-side bridge waits here, bounded to 100ms. The motor S3
-      // never makes outbound connections or waits for a client.
+      // Limit the healthcare bridge's outbound connection attempt to 100 ms.
       if(connection.connect(IPAddress(192,168,4,1),PV_BRIDGE_PORT,100))link_.attach(connection,pair_.secret,false,now);
     }
     link_.poll(millis());
@@ -153,5 +152,5 @@ class PharmaVaultBridge {
 PharmaVaultBridge bridge;
 // Arduino entry point for initialising the bridge after power-up.
 void setup(){bridge.begin();}
-// Arduino repeats this single nonblocking service pass while the board is powered.
+// Arduino repeats this service pass while the board is powered.
 void loop(){bridge.run();}

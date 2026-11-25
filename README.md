@@ -21,7 +21,7 @@ The pillbox makes its own Wi-Fi access point. The healthcare station exchanges d
 | `02_ESPmsp_FireBeetle/PharmaVault_ESPmsp/` | Wi-Fi to UART bridge | FireBeetle 2 ESP32-E, Arduino IDE |
 | `03_Healthcare_MSP430/PharmaVault_Healthcare_MSP430/` | Healthcare station source, CCS project and target firmware | MSP430F5529, Code Composer Studio |
 
-**Editing the dashboard:** the page lives in `PvDashboardHtml.h`. After changing it (or `web/mascot.webp`), run `python 01_PBesp_ESP32S3/PharmaVault_PBesp/web/build_web.py` to regenerate the gzipped copy the board serves. The build fails with a reminder if you forget.
+**Editing the dashboard.** The page lives in `PvDashboardHtml.h`. After changing it or `web/mascot.webp`, run `python 01_PBesp_ESP32S3/PharmaVault_PBesp/web/build_web.py` and rebuild the sketch. The compile-time check compares the HTML length. Regenerate the served assets even for edits of equal length.
 
 Use `WIRING.txt` for the pin map and `TEST_AND_DEMO.txt` for bench checks. Driver and toolchain references are in `SOURCES.txt`. The [archived wired edition with team credits](https://github.com/nyx-ulrix/PharmaVault_NFC_Fill/tree/ab0dd58c3d40fb02b74a938d62b9b5845f984edd/04_WIRED_BACKUP) remains accessible in Git history.
 
