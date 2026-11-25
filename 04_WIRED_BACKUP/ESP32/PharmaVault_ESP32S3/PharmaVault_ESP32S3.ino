@@ -1,3 +1,4 @@
+/* Author: Choo Zhen Da (CZD). Wired backup version, kept as a fallback. Revised 2026-11-25. */
 /* PHARMAVAULT repeat timer test 1; based on the streamlined weekly release. ESP32-S3 / Arduino-ESP32 core 3.x.
  * AI-assisted prototype. Team: record actual authors, changes and personal reflections.
  * 28BYJ-48 via ULN2003 IN1/2/3/4 -> GPIO5/6/7/8; IR OUT -> GPIO14 at3.3V.

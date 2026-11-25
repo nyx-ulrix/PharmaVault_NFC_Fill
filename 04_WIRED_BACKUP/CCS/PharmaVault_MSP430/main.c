@@ -1,3 +1,4 @@
+/* Author: Choo Zhen Da (CZD). Wired backup version, kept as a fallback. Revised 2026-11-25. */
 /* PHARMAVAULT MSP430F5529 sensor node, weekly refill release 1 (2026-11-13).
  * Toolchain: TI CCS MSP430 C compiler, C99, MSP430X small code/data model.
  * This node reads NTC temperature, DHT11 humidity, and RC522 card UIDs.

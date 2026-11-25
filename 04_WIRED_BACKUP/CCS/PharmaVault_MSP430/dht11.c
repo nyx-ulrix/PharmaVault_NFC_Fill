@@ -1,3 +1,4 @@
+/* Author: Choo Zhen Da (CZD). Wired backup version, kept as a fallback. Revised 2026-11-25. */
 #include "dht11.h"
 #include <msp430.h>
 

@@ -1,3 +1,4 @@
+/* Author: Choo Zhen Da (CZD). Wired backup version, kept as a fallback. Revised 2026-11-25. */
 /*
  * PHARMAVAULT RC522 reader driver, revision 1.0
  * Target MSP430F5529, TI CCS C99, MCLK 4.194304 MHz, SMCLK 1.048576 MHz.

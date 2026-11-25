@@ -1,3 +1,4 @@
+/* Author: Choo Zhen Da (CZD). Wired backup version, kept as a fallback. Revised 2026-11-25. */
 #ifndef THERMISTOR_CONFIG_H
 #define THERMISTOR_CONFIG_H
 
