@@ -858,6 +858,45 @@ int main(void)
     }
 }
 
-/* Team record: add the actual contributors and version history at the top.
- * Each member adds their own 5–10 lines on implementation, evidence and learning.
+/* Individual coding reflections
+ *
+ * Xavier Poh (XP)
+ * I wrote the daily dispensing logic and the code that steps the carousel.
+ * The hardest case was a reset after the motor had already started moving.
+ * I made the program save ATTEMPTED before it energises the first coil.
+ * After a reset, that record blocks a second automatic attempt for the same day.
+ * I also kept wireless retries separate from the timing of each motor step.
+ * This showed me how to apply CEG2002 timers when two tasks must keep running.
+ *
+ * Choo Zhen Da (CZD)
+ * I worked on the wired prototype and the PV1 message format with its CRC-16 check.
+ * We could reuse those messages when we added the wireless link to the pillbox.
+ * I wrote the Wi-Fi access point and the HTTP handlers for status and schedule changes.
+ * When the dashboard disconnected, the log showed about 40 failed Wi-Fi retries per minute.
+ * With retries two minutes apart, the hotspot stayed on one channel in our 60-second test.
+ * I learned to trace a sensor reading across both the UART link and the web server.
+ *
+ * Malcolm Liew Jia En (ML)
+ * Alongside designing the tray, I worked on the ESP32-S3 timers and dashboard.
+ * I used a 1 ms hardware tick for timekeeping and a separate 20 ms interrupt to sample the IR input.
+ * That fixed interval lets the firmware time a hand hold while the dashboard handles requests.
+ * I also used the browser clock to help restore the pillbox time after a restart.
+ * Building the tray showed me why finishing a step sequence cannot confirm that a pill fell.
+ * I would add an outlet sensor to check release and a home sensor to recover the tray position.
+ *
+ * Clifton Ng Jun Heng (CN)
+ * I worked on the pillbox sensor readings and the MSP430 loop that services the reader and LCD.
+ * Stray IR reflections taught me to require a clear interval before accepting a sustained hand hold.
+ * On the MSP430, I used timer interrupts to wake the CPU from LPM0 for scheduled work.
+ * The UART once sent the first frame and then fell silent because its transmit flag had cleared.
+ * I set UCTXIFG before enabling the transmit interrupt so the next queued frame could start.
+ * That fault taught me to check both the interrupt enable and the flag when tracing a stalled transfer.
+ *
+ * Mohamed Afiq (MA)
+ * I wrote the ESP32-S3 flash storage for schedules and dose history.
+ * The difficult case was preserving what the pillbox knew if power failed during a move.
+ * Storing ATTEMPTED and COMPLETED separately preserves that distinction after a restart.
+ * I added PB SENSORS console output so we could inspect the readings sent by the pillbox.
+ * On the MSP430, my RC522 driver reads the tag UID over SPI for the refill-note lookup.
+ * Working on both boards taught me to trace what the reader returned and what the firmware stored.
  */
