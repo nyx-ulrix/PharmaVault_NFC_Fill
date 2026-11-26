@@ -1,4 +1,4 @@
-# Author: Malcolm Liew Jia En (ML). Builds the dashboard and mascot assets. Revised 2026-11-25.
+# Author: Malcolm Liew Jia En (ML). Builds the dashboard and mascot assets.
 """Regenerate the compressed web assets compiled into the pillbox firmware.
 
 Run after editing the dashboard HTML in PvDashboardHtml.h or web/mascot.webp:

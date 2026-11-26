@@ -1,4 +1,4 @@
-/* Author: Mohamed Afiq (MA). RC522 NFC reader driver over SPI. Revised 2026-11-25. */
+/* Author: Mohamed Afiq (MA). RC522 NFC reader driver over SPI. */
 #ifndef PHARMAVAULT_RC522_H
 #define PHARMAVAULT_RC522_H
 

@@ -1,4 +1,4 @@
-/* Author: Xavier Poh (XP). FireBeetle UART-to-TCP bridge. Revised 2026-11-25. */
+/* Author: Xavier Poh (XP). FireBeetle UART-to-TCP bridge. */
 /* PHARMAVAULT wireless bridge 1 - FireBeetle 2 ESP32-E / DFR0654 V1.0.
  * Arduino-ESP32 core 3.3.12. Board: FireBeetle 2 ESP32-E (NOT ESP32-S3).
  * MSP430 P3.3 TX -> FireBeetle D11/GPIO16 RX2.

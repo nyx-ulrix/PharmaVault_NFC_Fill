@@ -1,4 +1,4 @@
-/* Author: Mohamed Afiq (MA). RC522 NFC reader driver over SPI. Revised 2026-11-25. */
+/* Author: Mohamed Afiq (MA). RC522 NFC reader driver over SPI. */
 /*
  * PHARMAVAULT RC522 reader driver, revision 1.0
  * Target MSP430F5529, TI CCS C99, MCLK 4.194304 MHz, SMCLK 1.048576 MHz.

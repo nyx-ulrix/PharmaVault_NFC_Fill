@@ -1,4 +1,4 @@
-/* Author: Xavier Poh (XP). Wireless transport (TCP channel, bridge core, wireless serial). Revised 2026-11-25. */
+/* Author: Xavier Poh (XP). Wireless transport (TCP channel, bridge core, wireless serial). */
 #ifndef PHARMAVAULT_WIRELESS_SERIAL_H
 #define PHARMAVAULT_WIRELESS_SERIAL_H
 #include "PvTcpChannel.h"
