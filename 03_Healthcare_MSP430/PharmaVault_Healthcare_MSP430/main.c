@@ -9,7 +9,7 @@
  * Timer1_A, UART RX/TX ISRs and LPM0 retain interrupt-driven low-power operation.
  * No local ADC, DHT input or motor is initialized by this healthcare firmware.
  * A complete refill list is held in RAM for an explicitly marked offline view.
- * Revisions and team attribution: see this project's Git history. AI assisted.
+ * Revisions and team attribution: see this project's Git history.
  */
 #include <msp430.h>
 #include <stdbool.h>

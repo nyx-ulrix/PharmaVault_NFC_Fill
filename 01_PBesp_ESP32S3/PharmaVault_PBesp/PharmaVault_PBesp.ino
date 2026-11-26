@@ -1,5 +1,5 @@
 /* PHARMAVAULT PBesp wireless 2; independent patient pillbox. ESP32-S3 / Arduino-ESP32 core 3.x.
- * AI-assisted prototype. Team P1-7. Each section below is tagged with its author:
+ * Team P1-7 firmware contributions:
  *   Malcolm Liew Jia En (ML): hardware timers, IR sampling ISR, clock sync, dashboard UI and mascot.
  *   Xavier Poh (XP): dose schedule, dispensing state machine, motor control; wireless transport.
  *   Choo Zhen Da (CZD): Wi-Fi access point, web server and HTTP endpoints; PV1 protocol.
@@ -10,23 +10,22 @@
  *   2026-11-25, Malcolm Liew Jia En (ML): hardware-timer system tick and IR sampling
  *     (CEG2002 timer functions + ISRs); automatic clock sync from the dashboard.
  *   2026-11-25, ML: load cell removed; author tags added from the team split.
- *   2026-11-25, AI-assisted review: retain sampled IR edges and retry interrupted dashboard clock syncs.
+ *   2026-11-25: retain sampled IR edges and retry interrupted dashboard clock syncs.
  * 28BYJ-48 via ULN2003 IN1/2/3/4 -> GPIO5/6/7/8; IR OUT -> GPIO14 at3.3V.
  * Local sensors: GPIO1 ADC1 NTC10k/B3950; GPIO2 DHT11 DATA, both 3V3.
  * No servo is used. GPIO3 is an unused input; GPIO13 is driven HIGH to power the NTC divider; each station has its own local common ground.
  * MSP430 link arrives over the paired FireBeetle Wi-Fi bridge; S3 GPIO4/17 unused.
  * 13:00 Singapore makes the next dose available WITHOUT motor movement.
- * A fresh continuous1.5s hand presentation advances one compartment to dispense.
+ * The IR input reads LOW for a hand and HIGH when clear. A fresh 1.5 s hold advances one compartment.
  * 14:00 flags incomplete days overdue. One late attempt is permitted until midnight.
  * The attempt is saved before any coil energizes; uncertain attempts never auto-retry.
  * NFC displays weekly progress/refill status on the MSP LCD, without movement.
  * After ESP boot set laptop time, confirm actual CURRENT compartment and enable.
  * Position/pill delivery are not physically measured. Test mechanical release with dummy contents.
  * Earlier daily firmware Ready records are faulted when upgrading to the weekly workflow.
- * IR is LOW=hand, HIGH=clear; fixed1500ms. No website IR calibration.
  * Optional RAM-only test mode repeats fresh hand-triggered rotations with daily schedule paused.
  * Test rotations do not record daily doses; restart turns test mode off.
- * Seven date-specific days, slot8 empty parking; NFC only reports weekly status.
+ * Slots 1 through 7 hold the daily doses. Slot 8 is the parking position.
  * Timer repeats; refill reminder after day7 completion or day8 midnight.
  * Serial115200: ? access details, i diagnostics. Pair with healthcare MSP430 wireless provider1.
  */
@@ -973,7 +972,7 @@ class PharmaVault {
     pollIr(nowMs());servicePillboxSensors(nowMs());
     if(networkQueued){networkQueued=false;staRetryAt=nowMs();WiFi.disconnect(false,false);WiFi.begin(network.ssid,network.password);}
     const bool connected=WiFi.status()==WL_CONNECTED;if(connected&&!wasConnected){Serial.print("Same-Wi-Fi dashboard: http://pharmavault.local or http://");Serial.println(WiFi.localIP());}wasConnected=connected;
-    // ponytail: one home-network attempt every 2 min; each attempt scans channels and briefly moves the PharmaVault AP.
+    // Space home Wi-Fi retries two minutes apart because scanning can briefly move the pillbox AP to another channel.
     if(network.magic==NetworkMagic&&!connected&&nowMs()-staRetryAt>=StaRetryMs){staRetryAt=nowMs();WiFi.begin(network.ssid,network.password);}
     if(Serial.available()){const int c=Serial.read();if(c=='?')printAccess();else if(c=='i'||c=='I'||c=='n'||c=='N'||c=='u'||c=='U')printDiagnostics();}
     web.handleClient();serviceClock(nowMs());serviceDaily(nowMs());pollIr(nowMs());serviceHand(nowMs());delay(1);

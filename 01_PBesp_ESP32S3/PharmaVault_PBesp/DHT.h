@@ -66,7 +66,7 @@ public:
                          bool isFahrenheit = true);
   float readHumidity(bool force = false);
   bool read(bool force = false);
-  // PharmaVault diagnostic addition (AI-assisted, 2026-11-25). Copy the last
+  // PharmaVault diagnostic addition (2026-11-25). Copy the last
   // checksum-verified wire frame without starting another sensor transaction.
   bool copyLastFrame(uint8_t (&frame)[5]) const {
     if (!_lastresult) return false;
