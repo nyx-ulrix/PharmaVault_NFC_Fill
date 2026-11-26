@@ -8,6 +8,7 @@
  * UART protocol remains 9600 8N1, 3.3V. No sensor/motor connects here.
  * Authenticated TCP bridge through the main S3's protected PharmaVault AP.
  * A link failure discards queued/partial frames; MSP430 retries normally.
+ * AI-assisted: AI suggestions were reviewed, adapted and tested on the boards by the team.
  */
 #include <Arduino.h>
 #include <WiFi.h>

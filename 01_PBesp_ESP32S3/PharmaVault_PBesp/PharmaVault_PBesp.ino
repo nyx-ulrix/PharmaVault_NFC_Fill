@@ -1,4 +1,6 @@
 /* PHARMAVAULT PBesp wireless 2; independent patient pillbox. ESP32-S3 / Arduino-ESP32 core 3.x.
+ * AI-assisted: AI suggestions were reviewed, adapted and tested on the boards by the team
+ * (see the report's Use of Generative AI section).
  * Team P1-7 firmware contributions:
  *   Malcolm Liew Jia En (ML): hardware timers, IR sampling ISR, clock sync, dashboard UI and mascot.
  *   Xavier Poh (XP): dose schedule, dispensing state machine, motor control; wireless transport.
@@ -489,7 +491,7 @@ class PharmaVault {
   void loadSettings(){
     storageOk=prefs.begin("pharmavault",false);strcpy(accessPassword,"PharmaVault67");  // fixed AP and dashboard password
     if(!storageOk)return;
-    if(prefs.getBytesLength("network")==sizeof(network))prefs.getBytes("network",&network,sizeof(network));{const uint16_t rh=prefs.getUShort("rhmax",PvPillboxSensors::DefaultMaxHumidity);if(rh>=3000&&rh<=9900)sensors.maxHumidity=rh;}
+    if(prefs.getBytesLength("network")==sizeof(network))prefs.getBytes("network",&network,sizeof(network));{const uint16_t rh=prefs.getUShort("rhmax",PvPillboxSensors::DefaultMaxHumidity);if(rh>=3000&&rh<=9000)sensors.maxHumidity=rh;}  // above 90 %RH is outside the DHT11 range: keep the default
     if(network.magic!=NetworkMagic||!memchr(network.ssid,0,sizeof(network.ssid))||!memchr(network.password,0,sizeof(network.password))||!network.ssid[0]||strlen(network.password)>63||(network.password[0]&&strlen(network.password)<8))network=NetworkSettings{};
     // Ignore former hand1/hold1 preferences: direct LOW detection and 1500ms are fixed.
     if(prefs.getBytesLength("stepper1")==sizeof(stepper))prefs.getBytes("stepper1",&stepper,sizeof(stepper));
@@ -931,7 +933,7 @@ class PharmaVault {
     lastAction="All seven days recorded; empty compartment 8 confirmed. Daily timer enabled with the same saved times. No NFC tap needed.";
     web.send(200,"text/plain",lastAction);
   }
-  void saveLimits(){if(!authorize())return;noCache();uint16_t pct=0;if(!pv_u16(web.arg("rhMax").c_str(),&pct)||pct<30||pct>99){web.send(400,"text/plain","Use a humidity limit from 30 to 99 %.");return;}if(!consumeToken())return;if(!storageOk||prefs.putUShort("rhmax",uint16_t(pct*100))!=2){requireStorage();return;}sensors.maxHumidity=uint16_t(pct*100);web.send(200,"text/plain","Humidity limit saved. Alerts now start above "+String(pct)+" %.");}
+  void saveLimits(){if(!authorize())return;noCache();uint16_t pct=0;if(!pv_u16(web.arg("rhMax").c_str(),&pct)||pct<30||pct>90){web.send(400,"text/plain","Use a humidity limit from 30 to 90 % (the DHT11's rated range).");return;}if(!consumeToken())return;if(!storageOk||prefs.putUShort("rhmax",uint16_t(pct*100))!=2){requireStorage();return;}sensors.maxHumidity=uint16_t(pct*100);web.send(200,"text/plain","Humidity limit saved. Alerts now start above "+String(pct)+" %.");}
   void forgetWifi(){if(!authorize())return;noCache();if(!consumeToken())return;network=NetworkSettings{};if(storageOk)prefs.remove("network");WiFi.disconnect(false,true);web.send(200,"text/plain","Home network forgotten. The pillbox now uses only its own PharmaVault Wi-Fi.");}
   void saveWifi(){
     if(!authorize())return;noCache();if(!requireStorage())return;const String ssid=web.arg("ssid"),password=web.arg("password");

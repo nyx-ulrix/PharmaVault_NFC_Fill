@@ -10,6 +10,7 @@
  * No local ADC, DHT input or motor is initialized by this healthcare firmware.
  * A complete refill list is held in RAM for an explicitly marked offline view.
  * Revisions and team attribution: see this project's Git history.
+ * AI-assisted: AI suggestions were reviewed, adapted and tested on the boards by the team.
  */
 #include <msp430.h>
 #include <stdbool.h>

@@ -21,7 +21,7 @@ class PvPillboxSensors {
   static constexpr int32_t InvalidTemperature=-32768;
   static constexpr uint16_t InvalidHumidity=65535;
   static constexpr int32_t MinDemoTemperature=2000,MaxDemoTemperature=3000;
-  static constexpr uint16_t DefaultMaxHumidity=9500;  // %RH x100; user-adjustable in Settings
+  static constexpr uint16_t DefaultMaxHumidity=9000;  // %RH x100; top of the DHT11's rated 20-90 %RH; adjustable in Settings
   // Conversion assumes GPIO13 supplies nominally 3300 mV under the divider's light load.
   // Use calibrated ADC millivolts, not raw/4095 as a supply-voltage ratio.
   static constexpr float SupplyMillivolts=3300.0f,FixedOhms=10000.0f;
