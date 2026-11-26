@@ -25,7 +25,9 @@ class PvPillboxSensors {
   // Conversion assumes GPIO13 supplies nominally 3300 mV under the divider's light load.
   // Use calibrated ADC millivolts, not raw/4095 as a supply-voltage ratio.
   static constexpr float SupplyMillivolts=3300.0f,FixedOhms=10000.0f;
-  static constexpr float NtcR25Ohms=10000.0f,NtcBeta=3950.0f;
+  // Calibrated 2026-11-26 (ML): B and R25 fitted to reference readings at 20, 25, 30 and 40 C
+  // (datasheet values were R25 = 10000 ohm, B = 3950 K); error within +/-1 C from 20 to 40 C.
+  static constexpr float NtcR25Ohms=9841.0f,NtcBeta=3998.0f;   // fitted calibration constants (ML)
 
   int32_t temperatureX100=InvalidTemperature;
   uint16_t rhX100=InvalidHumidity;
