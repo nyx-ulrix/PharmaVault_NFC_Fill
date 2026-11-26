@@ -981,3 +981,43 @@ class PharmaVault {
 PharmaVault cabinet;
 void setup(){cabinet.begin();}
 void loop(){cabinet.run();}
+
+/* Individual coding reflections - ESP32-S3 patient pillbox
+ *
+ * Xavier Poh (XP)
+ * I wrote the daily dispensing logic and the code that steps the carousel.
+ * The hardest case was a reset after the motor had already started moving.
+ * I made the program save ATTEMPTED before it energises the first coil.
+ * After a reset, that record blocks a second automatic attempt for the same day.
+ * I learned to decide what the pillbox must remember before commanding a physical move.
+ *
+ * Choo Zhen Da (CZD)
+ * I worked on the wired prototype and the PV1 message format with its CRC-16 check.
+ * We could reuse those messages when we added the wireless link to the pillbox.
+ * I wrote the Wi-Fi access point and the HTTP handlers for status and schedule changes.
+ * When the dashboard disconnected, the log showed about 40 failed Wi-Fi retries per minute.
+ * With retries two minutes apart, the hotspot stayed on one channel in our 60-second test.
+ * I learned to trace a sensor reading across both the UART link and the web server.
+ *
+ * Malcolm Liew Jia En (ML)
+ * Alongside designing the tray, I worked on the ESP32-S3 timers and dashboard.
+ * I used a 1 ms hardware tick for timekeeping and a separate 20 ms interrupt to sample the IR input.
+ * That fixed interval lets the firmware time a hand hold while the dashboard handles requests.
+ * I also used the browser clock to help restore the pillbox time after a restart.
+ * Building the tray showed me why finishing a step sequence cannot confirm that a pill fell.
+ * I would add an outlet sensor to check release and a home sensor to recover the tray position.
+ *
+ * Clifton Ng Jun Heng (CN)
+ * I wrote the pillbox routines that read the thermistor, the DHT11 and the IR hand sensor.
+ * Comparing the thermistor with a reference thermometer showed why its conversion needed calibration.
+ * I averaged ADC readings before converting the divider voltage to a temperature.
+ * I deferred DHT11 reads during motor movement because reading a frame takes time.
+ * Stray IR reflections taught me to require a clear interval before timing a fresh hand hold.
+ *
+ * Mohamed Afiq (MA)
+ * I wrote the ESP32-S3 flash storage for schedules and dose history.
+ * The difficult case was preserving what the pillbox knew if power failed during a move.
+ * Storing ATTEMPTED and COMPLETED separately preserves that distinction after a restart.
+ * I added PB SENSORS console output so we could inspect the readings sent by the pillbox.
+ * I learned why a saved motor event and a live sensor reading need different lifetimes.
+ */

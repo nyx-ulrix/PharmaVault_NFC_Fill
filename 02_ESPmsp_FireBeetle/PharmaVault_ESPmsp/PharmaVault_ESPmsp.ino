@@ -154,3 +154,13 @@ PharmaVaultBridge bridge;
 void setup(){bridge.begin();}
 // Arduino repeats this service pass while the board is powered.
 void loop(){bridge.run();}
+
+/* Individual coding reflection - FireBeetle ESP32-E healthcare bridge
+ *
+ * Xavier Poh (XP)
+ * I wrote the bridge that carries the MSP430's UART messages to the pillbox over Wi-Fi.
+ * I had to handle a connection dropping while only part of a UART frame had arrived.
+ * I cleared that partial frame on reconnection so old bytes could not enter the new session.
+ * Separate counters for forwarded, invalid and dropped frames helped us trace missing replies.
+ * This showed me why joining Wi-Fi and delivering a complete message need separate checks.
+ */
